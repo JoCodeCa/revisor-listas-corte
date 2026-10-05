@@ -128,4 +128,33 @@ r = comparar(misPiezas, reporteOCR.piezas);
 assert.strictEqual(r.resumen.conError, 0, 'el texto ruidoso del OCR debe comparar igual de bien que el PDF limpio');
 console.log('OK: parseReporteProveedor tolera el ruido típico del OCR en la columna Esquema');
 
+// --- caso real: el OCR pego "cantidad" y "base" sin espacio ("5571" en vez de "5 571") ---
+const textoReporteOCRPegado = `
+Material: MDF LIGERO 18MM 4X8 (Liso- 18 mm ) - MDF000061
+Desperdicio de la Sierra : 5 mm
+Cliente : JOSE LUIS CASTAÑEDA
+Cantidad de desplazamientos de la sierra =24 metros= 1 225.42
+Total de mts lineales: 45.726
+Lista de Planchas Utilizadas
+Cant Base Altura Detalle
+: 2 2440 1220 Placa Entera
+Piezas ubicadas
+Esquema Cant Base Altura Observación
+E 5 1876 290
+P—] 5571 140
+— 2 1900 290
+—— 1 1900 158
+1 1900 140
+Total de piezas cortadas : 14 Total m2: 4.8 Total ml: 45.7
+`;
+const reporteOCRPegado = parseReporteProveedor(textoReporteOCRPegado);
+assert.strictEqual(reporteOCRPegado.piezas.length, 5, 'debe recuperar la fila con "cantidad" y "base" pegados');
+assert.deepStrictEqual(
+  { cantidad: reporteOCRPegado.piezas[1].cantidad, base: reporteOCRPegado.piezas[1].base, altura: reporteOCRPegado.piezas[1].altura },
+  { cantidad: 5, base: 571, altura: 140 },
+);
+r = comparar(misPiezas, reporteOCRPegado.piezas);
+assert.strictEqual(r.resumen.conError, 0, 'debe comparar igual de bien tras separar el numero pegado');
+console.log('OK: parseReporteProveedor separa cantidad y base cuando el OCR las pega sin espacio');
+
 console.log('\nTodas las pruebas pasaron.');

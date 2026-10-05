@@ -183,12 +183,29 @@ function parseReporteProveedor(texto) {
       const l = lineas[i];
       if (/total\s+de\s+piezas\s+cortadas/i.test(l)) break;
       const numeros = [...l.matchAll(numeroRegex)];
-      if (numeros.length < 3) continue;
-      const [cantidadM, baseM, alturaM] = numeros.slice(-3);
+
+      let cantidadTexto, baseTexto, alturaM;
+
+      if (numeros.length >= 3) {
+        const ultimas = numeros.slice(-3);
+        cantidadTexto = ultimas[0][0];
+        baseTexto = ultimas[1][0];
+        alturaM = ultimas[2];
+      } else if (numeros.length === 2 && !/[.,]/.test(numeros[0][0]) && numeros[0][0].length >= 4) {
+        // El OCR a veces pega "cantidad" y "base" sin espacio (p.ej. "5571" en vez de
+        // "5 571"), dejando solo 2 números en la línea. La cantidad en estas listas
+        // casi siempre es de 1 dígito, así que separamos el primero del resto.
+        cantidadTexto = numeros[0][0].slice(0, 1);
+        baseTexto = numeros[0][0].slice(1);
+        alturaM = numeros[1];
+      } else {
+        continue;
+      }
+
       const finAltura = alturaM.index + alturaM[0].length;
       piezas.push({
-        cantidad: normalizaNumero(cantidadM[0]),
-        base: normalizaNumero(baseM[0]),
+        cantidad: normalizaNumero(cantidadTexto),
+        base: normalizaNumero(baseTexto),
         altura: normalizaNumero(alturaM[0]),
         observacion: l.slice(finAltura).trim(),
       });
