@@ -338,6 +338,34 @@ document.getElementById('btn-descargar').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
+// ===================== BORRAR TODO =====================
+
+document.getElementById('btn-borrar-todo').addEventListener('click', () => {
+  if (!confirm('¿Borrar mi lista, el reporte del proveedor y los resultados? No se puede deshacer.')) return;
+
+  estado = {
+    material: '',
+    cubrecanto: '',
+    misFilas: Array.from({ length: 6 }, filaMiaVacia),
+    provFilas: [],
+    provCliente: '',
+    provMaterial: '',
+  };
+  try { localStorage.removeItem(LS_KEY); } catch (e) { /* almacenamiento no disponible */ }
+
+  renderMia();
+  renderProveedor();
+
+  document.getElementById('resumen-comparacion').hidden = true;
+  document.getElementById('panel-resultados').hidden = true;
+  document.getElementById('panel-correcciones').hidden = true;
+  document.getElementById('ocr-resultado').hidden = true;
+  document.getElementById('pdf-estado').textContent = '';
+  document.getElementById('texto-pegado').value = '';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 // ===================== INIT =====================
 
 cargarEstado();
