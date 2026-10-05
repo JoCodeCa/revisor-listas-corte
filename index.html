@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revisor de Listas de Corte</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1f6f54">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>Revisor de Listas de Corte</h1>
+  <p class="subtitulo">Compara tu lista contra el reporte del proveedor y detecta errores de captura automáticamente.</p>
+</header>
+
+<main>
+
+  <!-- ===================== MI LISTA ===================== -->
+  <section class="panel" id="panel-mia">
+    <h2>1. Mi lista</h2>
+
+    <div class="campos-encabezado">
+      <label>Material
+        <input type="text" id="mia-material" placeholder="Ej. MDF 18 mm">
+      </label>
+      <label>Cubre canto
+        <input type="text" id="mia-cubrecanto" placeholder="Ej. PVC color nogal">
+      </label>
+    </div>
+
+    <div class="tabla-scroll">
+      <table id="tabla-mia">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>Cantidad</th>
+            <th>Lado A (cm)</th>
+            <th>Lado B (cm)</th>
+            <th colspan="4">Enchape (tapacanto)</th>
+            <th></th>
+          </tr>
+          <tr class="subencabezado">
+            <th></th><th></th><th></th><th></th>
+            <th>A1</th><th>A2</th><th>B1</th><th>B2</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-mia"></tbody>
+      </table>
+    </div>
+
+    <div class="acciones-fila">
+      <button type="button" id="btn-agregar-fila" class="btn btn-secundario">+ Agregar pieza</button>
+      <label class="btn btn-secundario btn-archivo">
+        Cargar foto de mi hoja (OCR beta)
+        <input type="file" id="input-foto-ocr" accept="image/*" hidden>
+      </label>
+    </div>
+    <div id="ocr-resultado" class="ocr-resultado" hidden>
+      <p><strong>Texto detectado en la foto (revisa y transcribe manualmente, el OCR de letra manuscrita no es confiable):</strong></p>
+      <textarea id="ocr-texto" rows="6" readonly></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== PROVEEDOR ===================== -->
+  <section class="panel" id="panel-proveedor">
+    <h2>2. Reporte del proveedor</h2>
+
+    <div class="acciones-fila">
+      <label class="btn btn-secundario btn-archivo">
+        Subir PDF del proveedor
+        <input type="file" id="input-pdf" accept="application/pdf" hidden>
+      </label>
+      <span id="pdf-estado" class="estado-texto"></span>
+    </div>
+
+    <details class="pegar-texto">
+      <summary>¿No tienes PDF? Pega aquí el texto del reporte</summary>
+      <textarea id="texto-pegado" rows="6" placeholder="Pega aquí el texto copiado del reporte del proveedor..."></textarea>
+      <button type="button" id="btn-procesar-texto" class="btn btn-secundario">Procesar texto pegado</button>
+    </details>
+
+    <div class="info-proveedor" id="info-proveedor" hidden>
+      <span id="prov-cliente"></span>
+      <span id="prov-material"></span>
+    </div>
+
+    <div class="tabla-scroll">
+      <table id="tabla-proveedor">
+        <thead>
+          <tr>
+            <th>Cantidad</th>
+            <th>Base (mm)</th>
+            <th>Altura (mm)</th>
+            <th>Observación</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-proveedor"></tbody>
+      </table>
+    </div>
+
+    <div class="acciones-fila">
+      <button type="button" id="btn-agregar-fila-prov" class="btn btn-secundario">+ Agregar pieza</button>
+    </div>
+  </section>
+
+  <!-- ===================== COMPARAR ===================== -->
+  <section class="panel panel-comparar">
+    <button type="button" id="btn-comparar" class="btn btn-primario">Comparar listas</button>
+    <div id="resumen-comparacion" class="resumen-comparacion" hidden></div>
+  </section>
+
+  <section class="panel" id="panel-resultados" hidden>
+    <h2>3. Resultado de la comparación</h2>
+    <div class="tabla-scroll">
+      <table id="tabla-resultados">
+        <thead>
+          <tr>
+            <th>Pieza (mía)</th>
+            <th>Capturado por proveedor</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-resultados"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== CORRECCIONES ===================== -->
+  <section class="panel" id="panel-correcciones" hidden>
+    <h2>4. Correcciones a enviar</h2>
+    <textarea id="texto-correcciones" rows="8" readonly></textarea>
+    <div class="acciones-fila">
+      <button type="button" id="btn-copiar" class="btn btn-secundario">Copiar al portapapeles</button>
+      <button type="button" id="btn-descargar" class="btn btn-secundario">Descargar .txt</button>
+      <a id="btn-whatsapp" class="btn btn-secundario" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="app-footer">
+  <p>Tus datos se guardan solo en este dispositivo (localStorage). Nada se envía a ningún servidor.</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+</script>
+<script src="engine.js"></script>
+<script src="pdfParser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

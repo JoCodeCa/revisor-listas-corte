@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      ".git/**",
+      ".github/**",
+      ".gitignore",
+      ".firebase/**",
+      "firebase.json",
+      "**/node_modules/**",
+      "test-engine.js",
+      "*.md",
+      "icons/icon.svg.bak"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|css|json)",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}
