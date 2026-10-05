@@ -174,19 +174,24 @@ function parseReporteProveedor(texto) {
   const piezas = [];
 
   if (idxPiezas !== -1) {
-    const filaRegex = /^(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*(.*)$/;
+    // No anclamos al inicio de línea: la columna "Esquema" es un dibujo, y el OCR
+    // suele leerlo como basura (guiones, corchetes, dígitos sueltos) antes de los
+    // números reales. Por eso tomamos los ÚLTIMOS 3 números de la línea (cantidad,
+    // base, altura) y lo que sobre antes se descarta como ruido del dibujo.
+    const numeroRegex = /\d+(?:[.,]\d+)?/g;
     for (let i = idxPiezas + 1; i < lineas.length; i++) {
       const l = lineas[i];
       if (/total\s+de\s+piezas\s+cortadas/i.test(l)) break;
-      const m = l.match(filaRegex);
-      if (m) {
-        piezas.push({
-          cantidad: normalizaNumero(m[1]),
-          base: normalizaNumero(m[2]),
-          altura: normalizaNumero(m[3]),
-          observacion: m[4] || '',
-        });
-      }
+      const numeros = [...l.matchAll(numeroRegex)];
+      if (numeros.length < 3) continue;
+      const [cantidadM, baseM, alturaM] = numeros.slice(-3);
+      const finAltura = alturaM.index + alturaM[0].length;
+      piezas.push({
+        cantidad: normalizaNumero(cantidadM[0]),
+        base: normalizaNumero(baseM[0]),
+        altura: normalizaNumero(alturaM[0]),
+        observacion: l.slice(finAltura).trim(),
+      });
     }
   }
 

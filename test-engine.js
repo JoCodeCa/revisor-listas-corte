@@ -101,4 +101,31 @@ r = comparar(misPiezas, reporte.piezas);
 assert.strictEqual(r.resumen.conError, 0);
 console.log('OK: parseReporteProveedor + comparar end-to-end sin errores');
 
+// --- parseReporteProveedor con texto "sucio" como el que produce el OCR real ---
+// La columna "Esquema" es un dibujo; el OCR la lee como basura (guiones, corchetes,
+// dígitos sueltos) antes de los números reales de cada fila.
+const textoReporteOCR = `
+Material: MDF LIGERO 18MM 4X8 (Liso- 18 mm ) - MDFO00061
+Desperdicio de la Sierra : 5 mm
+Cliente : JOSE LUIS CASTAÑEDA
+Cantidad de desplazamientos de la sierra =24 metros = 25.42
+Total de mts lineales: 45.726
+Lista de Planchas Utilizadas
+Cant Base Altura Detalle
+* 2 2440 1220 Placa Entera
+Piezas ubicadas
+Esquema Cant Base Altura Observación
+—— 5 1876 290
+P——] 5 571 140
+9 2 1900 290
+— 1 1900 158
+— 1 1900 140
+Total de piezas cortadas : 14 Total m2: 4.8 Total ml: 45.7
+`;
+const reporteOCR = parseReporteProveedor(textoReporteOCR);
+assert.strictEqual(reporteOCR.piezas.length, 5, 'debe extraer las 5 piezas pese al ruido del OCR');
+r = comparar(misPiezas, reporteOCR.piezas);
+assert.strictEqual(r.resumen.conError, 0, 'el texto ruidoso del OCR debe comparar igual de bien que el PDF limpio');
+console.log('OK: parseReporteProveedor tolera el ruido típico del OCR en la columna Esquema');
+
 console.log('\nTodas las pruebas pasaron.');
