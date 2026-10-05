@@ -219,7 +219,7 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
   const contenedor = document.getElementById('ocr-resultado');
   const estadoP = document.getElementById('ocr-estado');
   contenedor.hidden = false;
-  estadoP.textContent = 'Analizando la foto con IA, esto puede tardar unos segundos...';
+  estadoP.textContent = 'Analizando la foto con IA, esto puede tardar unos segundos (reintenta sola si el modelo está saturado)...';
 
   try {
     if (typeof window.leerHojaConIA !== 'function') {
