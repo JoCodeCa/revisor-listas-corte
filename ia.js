@@ -39,7 +39,7 @@ const esquemaHoja = Schema.object({
 });
 
 const modelo = getGenerativeModel(ai, {
-  model: 'gemini-3.8-flash',
+  model: 'gemini-3.5-flash-lite',
   generationConfig: {
     responseMimeType: 'application/json',
     responseSchema: esquemaHoja,
