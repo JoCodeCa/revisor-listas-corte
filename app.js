@@ -257,12 +257,11 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
 // ===================== COMPARAR =====================
 
 function estadoALegible(estadoPieza) {
-  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Revisar orientación', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
+  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
   return mapa[estadoPieza] || estadoPieza;
 }
 function estadoAClase(estadoPieza) {
   if (estadoPieza === 'ok') return 'fila-ok';
-  if (estadoPieza === 'invertida') return 'fila-advertencia';
   return 'fila-error';
 }
 

@@ -108,7 +108,7 @@ function comparar(misFilas, filasProveedor, tolerancia = TOLERANCIA_MM) {
         mia,
         proveedor: candidata,
         estado: 'invertida',
-        mensaje: `Revisar orientación: el proveedor capturó ${candidata.base_mm} x ${candidata.altura_mm} mm (lados invertidos respecto a tu medida)`,
+        mensaje: `Veta mal orientada: capturaron Base=${candidata.base_mm} Altura=${candidata.altura_mm} mm, pero pediste Lado A (veta)=${mia.ladoA_mm} Lado B=${mia.ladoB_mm} mm — cruzaron los lados, la pieza saldría con la veta en el sentido incorrecto`,
       };
     }
 

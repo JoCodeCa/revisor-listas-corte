@@ -3,8 +3,6 @@
   --verde-claro: #e6f3ef;
   --rojo: #b3261e;
   --rojo-claro: #fbe9e7;
-  --amarillo: #8a6100;
-  --amarillo-claro: #fff6e0;
   --borde: #d8dde1;
   --texto: #1c2024;
   --texto-suave: #5a6168;
@@ -207,7 +205,6 @@ td input[type="checkbox"] { width: 18px; height: 18px; }
 
 .fila-ok { background: var(--verde-claro); }
 .fila-error { background: var(--rojo-claro); }
-.fila-advertencia { background: var(--amarillo-claro); }
 
 .estado-pill {
   display: inline-block;
@@ -218,7 +215,6 @@ td input[type="checkbox"] { width: 18px; height: 18px; }
 }
 .fila-ok .estado-pill { background: var(--verde); color: white; }
 .fila-error .estado-pill { background: var(--rojo); color: white; }
-.fila-advertencia .estado-pill { background: var(--amarillo); color: white; }
 
 #texto-correcciones {
   width: 100%;
