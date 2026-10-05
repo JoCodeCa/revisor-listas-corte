@@ -8,8 +8,12 @@ automáticamente errores de captura.
 
 1. **Mi lista**: captura tus piezas (cantidad, Lado A, Lado B en **centímetros**,
    igual que en tu hoja de papel) y qué lados llevan tapacanto.
-2. **Reporte del proveedor**: sube el PDF que te regresan (o pega el texto si no
-   tienes PDF) y la app extrae automáticamente sus piezas (en **milímetros**).
+2. **Reporte del proveedor**: sube lo que te regresen — PDF, foto o captura de
+   pantalla, o un archivo de texto — (o pega el texto si no tienes archivo) y
+   la app extrae automáticamente sus piezas (en **milímetros**). Los PDF con
+   texto seleccionable se leen directo (más confiable); las imágenes se leen
+   con OCR (Tesseract.js), útil para texto impreso pero revisa siempre la
+   tabla resultante antes de comparar.
 3. **Comparar**: la app convierte tus medidas a milímetros y empareja cada
    pieza, señalando:
    - **Cantidad incorrecta**

@@ -129,23 +129,50 @@ function aplicarReporteParseado(reporte) {
   renderProveedor();
 }
 
+function esImagen(file) {
+  return file.type.startsWith('image/');
+}
+function esPDF(file) {
+  return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+}
+function esTexto(file) {
+  return file.type === 'text/plain' || /\.txt$/i.test(file.name);
+}
+
+async function extraerTextoDeArchivo(file, estadoTexto) {
+  if (esPDF(file)) {
+    estadoTexto.textContent = 'Leyendo PDF...';
+    return extraerTextoPDF(file);
+  }
+  if (esImagen(file)) {
+    estadoTexto.textContent = 'Leyendo imagen con OCR, esto puede tardar un poco (se descarga el modelo la primera vez)...';
+    return ocrImagen(file);
+  }
+  if (esTexto(file)) {
+    estadoTexto.textContent = 'Leyendo archivo de texto...';
+    return file.text();
+  }
+  // Tipo desconocido: intentamos leerlo como texto plano por si acaso.
+  estadoTexto.textContent = 'Intentando leer el archivo como texto...';
+  return file.text();
+}
+
 document.getElementById('input-pdf').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const estadoTexto = document.getElementById('pdf-estado');
-  estadoTexto.textContent = 'Leyendo PDF...';
   try {
-    const texto = await extraerTextoPDF(file);
+    const texto = await extraerTextoDeArchivo(file, estadoTexto);
     const reporte = Engine.parseReporteProveedor(texto);
     if (reporte.piezas.length === 0) {
-      estadoTexto.textContent = 'No se encontraron piezas en el PDF. Prueba con "pegar texto" o revisa el archivo.';
+      estadoTexto.textContent = 'No se encontraron piezas en el archivo. Prueba con "pegar texto" o revisa el archivo.';
       return;
     }
     aplicarReporteParseado(reporte);
-    estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas en el PDF. Revísalas antes de comparar.`;
+    estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas. Revísalas antes de comparar.`;
   } catch (err) {
     console.error(err);
-    estadoTexto.textContent = 'No se pudo leer el PDF (¿es una imagen escaneada sin texto? prueba "pegar texto").';
+    estadoTexto.textContent = 'No se pudo leer el archivo. Prueba con "pegar texto" como respaldo.';
   }
 });
 
@@ -165,6 +192,24 @@ document.getElementById('btn-procesar-texto').addEventListener('click', () => {
 
 let tesseractCargado = false;
 
+async function cargarTesseract() {
+  if (tesseractCargado) return;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  tesseractCargado = true;
+}
+
+async function ocrImagen(file) {
+  await cargarTesseract();
+  const { data } = await Tesseract.recognize(file, 'spa');
+  return data.text.trim();
+}
+
 document.getElementById('input-foto-ocr').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -175,18 +220,8 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
   textarea.value = 'Analizando imagen, esto puede tardar unos segundos...';
 
   try {
-    if (!tesseractCargado) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-      tesseractCargado = true;
-    }
-    const { data } = await Tesseract.recognize(file, 'spa');
-    textarea.value = data.text.trim() || '(no se detectó texto legible en la imagen)';
+    const texto = await ocrImagen(file);
+    textarea.value = texto || '(no se detectó texto legible en la imagen)';
   } catch (err) {
     console.error(err);
     textarea.value = 'No se pudo analizar la imagen. Transcribe los datos manualmente en la tabla de arriba.';

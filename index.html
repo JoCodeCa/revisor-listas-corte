@@ -69,14 +69,14 @@
 
     <div class="acciones-fila">
       <label class="btn btn-secundario btn-archivo">
-        Subir PDF del proveedor
-        <input type="file" id="input-pdf" accept="application/pdf" hidden>
+        Subir reporte del proveedor (PDF, foto o captura)
+        <input type="file" id="input-pdf" accept="application/pdf,image/*,.txt,text/plain" hidden>
       </label>
       <span id="pdf-estado" class="estado-texto"></span>
     </div>
 
     <details class="pegar-texto">
-      <summary>¿No tienes PDF? Pega aquí el texto del reporte</summary>
+      <summary>¿No tienes archivo? Pega aquí el texto del reporte</summary>
       <textarea id="texto-pegado" rows="6" placeholder="Pega aquí el texto copiado del reporte del proveedor..."></textarea>
       <button type="button" id="btn-procesar-texto" class="btn btn-secundario">Procesar texto pegado</button>
     </details>
