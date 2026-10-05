@@ -157,4 +157,29 @@ r = comparar(misPiezas, reporteOCRPegado.piezas);
 assert.strictEqual(r.resumen.conError, 0, 'debe comparar igual de bien tras separar el numero pegado');
 console.log('OK: parseReporteProveedor separa cantidad y base cuando el OCR las pega sin espacio');
 
+// --- cubrecanto: coincide cuando el conteo de lados A/B enchapados es igual ---
+const misPiezasConEnchape = [
+  { no: 1, cantidad: 5, ladoA: 187.6, ladoB: 29, enchapeA1: true, enchapeA2: false, enchapeB1: true, enchapeB2: true },
+];
+const provConEnchapeOK = [
+  { cantidad: 5, base: 1876, altura: 290, ladoAEnchapado: 1, ladoBEnchapado: 2 },
+];
+r = comparar(misPiezasConEnchape, provConEnchapeOK);
+assert.strictEqual(r.resumen.conError, 0, 'el cubrecanto coincide (1 lado A, 2 lados B)');
+console.log('OK: cubrecanto coincide cuando los conteos de lados A/B son iguales');
+
+// --- cubrecanto: detecta cuando el proveedor marco menos lados de los pedidos ---
+const provConEnchapeMal = [
+  { cantidad: 5, base: 1876, altura: 290, ladoAEnchapado: 0, ladoBEnchapado: 2 },
+];
+r = comparar(misPiezasConEnchape, provConEnchapeMal);
+const errEnchape = r.resultados.find(x => x.estado === 'enchape');
+assert.ok(errEnchape, 'debe detectar que falto cubrecanto en un lado A');
+console.log('OK: detecta cubrecanto faltante/incorrecto por lado');
+
+// --- cubrecanto: si el proveedor no trae datos de enchape (reporte leido solo como texto), no se compara ---
+r = comparar(misPiezasConEnchape, piezasProveedorCorrectas.slice(0, 1).map(p => ({ ...p, cantidad: 5, base: 1876, altura: 290 })));
+assert.strictEqual(r.resultados.find(x => x.estado === 'enchape'), undefined, 'sin datos de enchape del proveedor no debe marcarse error de cubrecanto');
+console.log('OK: no compara cubrecanto cuando el proveedor no trae esa informacion');
+
 console.log('\nTodas las pruebas pasaron.');

@@ -6,7 +6,7 @@ const filaMiaVacia = () => ({
   cantidad: '', ladoA: '', ladoB: '',
   enchapeA1: false, enchapeA2: false, enchapeB1: false, enchapeB2: false,
 });
-const filaProvVacia = () => ({ cantidad: '', base: '', altura: '', observacion: '' });
+const filaProvVacia = () => ({ cantidad: '', base: '', altura: '', ladoAEnchapado: '', ladoBEnchapado: '', observacion: '' });
 
 let estado = {
   material: '',
@@ -97,6 +97,8 @@ function renderProveedor() {
       <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="base" value="${fila.base}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="altura" value="${fila.altura}"></td>
+      <td><input type="number" min="0" max="2" step="1" data-campo="ladoAEnchapado" value="${fila.ladoAEnchapado ?? ''}"></td>
+      <td><input type="number" min="0" max="2" step="1" data-campo="ladoBEnchapado" value="${fila.ladoBEnchapado ?? ''}"></td>
       <td><input type="text" data-campo="observacion" value="${fila.observacion || ''}"></td>
       <td><button type="button" class="btn-eliminar" title="Eliminar pieza">✕</button></td>
     `;
@@ -123,7 +125,9 @@ function aplicarReporteParseado(reporte) {
   estado.provCliente = reporte.cliente || '';
   estado.provMaterial = reporte.material || '';
   estado.provFilas = reporte.piezas.map(p => ({
-    cantidad: p.cantidad, base: p.base, altura: p.altura, observacion: p.observacion || '',
+    cantidad: p.cantidad, base: p.base, altura: p.altura,
+    ladoAEnchapado: p.ladoAEnchapado ?? '', ladoBEnchapado: p.ladoBEnchapado ?? '',
+    observacion: p.observacion || '',
   }));
   guardarEstado();
   renderProveedor();
@@ -157,19 +161,43 @@ async function extraerTextoDeArchivo(file, estadoTexto) {
   return file.text();
 }
 
+async function leerProveedorConTextoPlano(file, estadoTexto) {
+  const texto = await extraerTextoDeArchivo(file, estadoTexto);
+  const reporte = Engine.parseReporteProveedor(texto);
+  if (reporte.piezas.length === 0) {
+    estadoTexto.textContent = 'No se encontraron piezas en el archivo. Prueba con "pegar texto" o revisa el archivo.';
+    return;
+  }
+  aplicarReporteParseado(reporte);
+  estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas (sin cubrecanto, se leyó solo el texto). Revísalas antes de comparar.`;
+}
+
 document.getElementById('input-pdf').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const estadoTexto = document.getElementById('pdf-estado');
-  try {
-    const texto = await extraerTextoDeArchivo(file, estadoTexto);
-    const reporte = Engine.parseReporteProveedor(texto);
-    if (reporte.piezas.length === 0) {
-      estadoTexto.textContent = 'No se encontraron piezas en el archivo. Prueba con "pegar texto" o revisa el archivo.';
+
+  // Para PDF/imagen usamos IA primero: puede leer también el cubrecanto del dibujo
+  // del Esquema, cosa que la extracción de texto (PDF/OCR) no puede ver.
+  if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
+    estadoTexto.textContent = 'Leyendo el reporte con IA, esto puede tardar unos segundos...';
+    try {
+      const reporte = await window.leerReporteProveedorConIA(file);
+      if (!reporte.piezas || reporte.piezas.length === 0) {
+        estadoTexto.textContent = 'No se detectaron piezas con IA. Prueba con "pegar texto" o revisa el archivo.';
+        return;
+      }
+      aplicarReporteParseado(reporte);
+      estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas, incluyendo cubrecanto. Revísalas antes de comparar.`;
       return;
+    } catch (err) {
+      console.error(err);
+      estadoTexto.textContent = 'La IA no pudo leer el archivo, intentando solo con el texto (sin cubrecanto)...';
     }
-    aplicarReporteParseado(reporte);
-    estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas. Revísalas antes de comparar.`;
+  }
+
+  try {
+    await leerProveedorConTextoPlano(file, estadoTexto);
   } catch (err) {
     console.error(err);
     estadoTexto.textContent = 'No se pudo leer el archivo. Prueba con "pegar texto" como respaldo.';
@@ -257,7 +285,7 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
 // ===================== COMPARAR =====================
 
 function estadoALegible(estadoPieza) {
-  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
+  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', enchape: 'Cubrecanto incorrecto', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
   return mapa[estadoPieza] || estadoPieza;
 }
 function estadoAClase(estadoPieza) {
@@ -283,8 +311,13 @@ document.getElementById('btn-comparar').addEventListener('click', () => {
   resultados.forEach(r => {
     const tr = document.createElement('tr');
     tr.className = estadoAClase(r.estado);
-    const colMia = r.mia ? `${r.mia.cantidad} pza x ${r.mia.ladoA_cm} x ${r.mia.ladoB_cm} cm` : '—';
-    const colProv = r.proveedor ? `${r.proveedor.cantidad} pza x ${r.proveedor.base_mm} x ${r.proveedor.altura_mm} mm` : '—';
+    const colMia = r.mia
+      ? `${r.mia.cantidad} pza x ${r.mia.ladoA_cm} x ${r.mia.ladoB_cm} cm (cubrecanto: ${r.mia.contarA}A/${r.mia.contarB}B)`
+      : '—';
+    const colProv = r.proveedor
+      ? `${r.proveedor.cantidad} pza x ${r.proveedor.base_mm} x ${r.proveedor.altura_mm} mm` +
+        (r.proveedor.ladoAEnchapado !== null ? ` (cubrecanto: ${r.proveedor.ladoAEnchapado}A/${r.proveedor.ladoBEnchapado}B)` : '')
+      : '—';
     tr.innerHTML = `
       <td>${colMia}</td>
       <td>${colProv}</td>

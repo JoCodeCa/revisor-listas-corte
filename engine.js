@@ -29,7 +29,17 @@ function normalizarMisPiezas(filas) {
       enchapeA2: !!f.enchapeA2,
       enchapeB1: !!f.enchapeB1,
       enchapeB2: !!f.enchapeB2,
+      contarA: (f.enchapeA1 ? 1 : 0) + (f.enchapeA2 ? 1 : 0),
+      contarB: (f.enchapeB1 ? 1 : 0) + (f.enchapeB2 ? 1 : 0),
     }));
+}
+
+// Convierte a 0/1/2 un valor de conteo de cubrecanto, o null si no viene (p.ej. cuando
+// el reporte del proveedor se leyó solo como texto, sin poder ver el dibujo del Esquema).
+function aConteoEnchape(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Normaliza las piezas extraídas del reporte del proveedor (ya en mm).
@@ -42,6 +52,8 @@ function normalizarPiezasProveedor(filas) {
       base_mm: Number(f.base),
       altura_mm: Number(f.altura),
       observacion: f.observacion || '',
+      ladoAEnchapado: aConteoEnchape(f.ladoAEnchapado),
+      ladoBEnchapado: aConteoEnchape(f.ladoBEnchapado),
     }));
 }
 
@@ -110,6 +122,19 @@ function comparar(misFilas, filasProveedor, tolerancia = TOLERANCIA_MM) {
         estado: 'invertida',
         mensaje: `Veta mal orientada: capturaron Base=${candidata.base_mm} Altura=${candidata.altura_mm} mm, pero pediste Lado A (veta)=${mia.ladoA_mm} Lado B=${mia.ladoB_mm} mm — cruzaron los lados, la pieza saldría con la veta en el sentido incorrecto`,
       };
+    }
+
+    // El cubrecanto solo se puede verificar cuando el reporte del proveedor se leyó
+    // con IA (puede ver el dibujo del Esquema); si vino de texto pegado, no se compara.
+    if (candidata.ladoAEnchapado !== null && candidata.ladoBEnchapado !== null) {
+      if (candidata.ladoAEnchapado !== mia.contarA || candidata.ladoBEnchapado !== mia.contarB) {
+        return {
+          mia,
+          proveedor: candidata,
+          estado: 'enchape',
+          mensaje: `Cubrecanto incorrecto: pediste ${mia.contarA} lado(s) A y ${mia.contarB} lado(s) B con cubrecanto, el proveedor marcó ${candidata.ladoAEnchapado} lado(s) A y ${candidata.ladoBEnchapado} lado(s) B`,
+        };
+      }
     }
 
     return { mia, proveedor: candidata, estado: 'ok', mensaje: 'Coincide' };
