@@ -39,7 +39,7 @@ const esquemaHoja = Schema.object({
 });
 
 const modelo = getGenerativeModel(ai, {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.8-flash',
   generationConfig: {
     responseMimeType: 'application/json',
     responseSchema: esquemaHoja,
@@ -73,14 +73,14 @@ function esperar(ms) {
 
 // Gemini a veces responde "modelo con mucha demanda" (error 500/503) en picos de tráfico;
 // suele resolverse solo reintentando a los pocos segundos.
-async function generarConReintentos(partes, intentos = 3) {
+async function generarConReintentos(partes, intentos = 4) {
   for (let i = 1; i <= intentos; i++) {
     try {
       return await modelo.generateContent(partes);
     } catch (err) {
       const esSaturado = /high demand|50[0-9]|overloaded|unavailable/i.test(err.message || '');
       if (!esSaturado || i === intentos) throw err;
-      await esperar(2000 * i);
+      await esperar(3000 * i);
     }
   }
 }
