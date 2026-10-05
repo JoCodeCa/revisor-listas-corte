@@ -53,13 +53,12 @@
     <div class="acciones-fila">
       <button type="button" id="btn-agregar-fila" class="btn btn-secundario">+ Agregar pieza</button>
       <label class="btn btn-secundario btn-archivo">
-        Cargar foto de mi hoja (OCR beta)
+        Cargar foto de mi hoja (lectura con IA)
         <input type="file" id="input-foto-ocr" accept="image/*" hidden>
       </label>
     </div>
     <div id="ocr-resultado" class="ocr-resultado" hidden>
-      <p><strong>Texto detectado en la foto (revisa y transcribe manualmente, el OCR de letra manuscrita no es confiable):</strong></p>
-      <textarea id="ocr-texto" rows="6" readonly></textarea>
+      <p id="ocr-estado"><strong>Analizando la foto...</strong></p>
     </div>
   </section>
 
@@ -151,6 +150,7 @@
 </script>
 <script src="engine.js"></script>
 <script src="pdfParser.js"></script>
+<script type="module" src="ia.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

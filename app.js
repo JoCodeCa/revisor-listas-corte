@@ -188,7 +188,9 @@ document.getElementById('btn-procesar-texto').addEventListener('click', () => {
   estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas en el texto pegado. Revísalas antes de comparar.`;
 });
 
-// ===================== OCR (beta, solo ayuda visual) =====================
+// ===================== OCR para imágenes del proveedor (texto impreso) =====================
+// Nota: para la foto de "mi lista" (letra manuscrita) se usa leerHojaConIA (ia.js, Gemini),
+// que es mucho más confiable que Tesseract para texto escrito a mano.
 
 let tesseractCargado = false;
 
@@ -215,16 +217,40 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
   if (!file) return;
 
   const contenedor = document.getElementById('ocr-resultado');
-  const textarea = document.getElementById('ocr-texto');
+  const estadoP = document.getElementById('ocr-estado');
   contenedor.hidden = false;
-  textarea.value = 'Analizando imagen, esto puede tardar unos segundos...';
+  estadoP.textContent = 'Analizando la foto con IA, esto puede tardar unos segundos...';
 
   try {
-    const texto = await ocrImagen(file);
-    textarea.value = texto || '(no se detectó texto legible en la imagen)';
+    if (typeof window.leerHojaConIA !== 'function') {
+      throw new Error('El módulo de lectura con IA todavía no está listo (revisa tu conexión y vuelve a intentar).');
+    }
+    const resultado = await window.leerHojaConIA(file);
+
+    if (!resultado.piezas || resultado.piezas.length === 0) {
+      estadoP.textContent = 'No se detectaron piezas en la foto. Intenta con mejor luz/enfoque o captura manualmente.';
+      return;
+    }
+
+    if (resultado.material && !estado.material) estado.material = resultado.material;
+    if (resultado.cubreCanto && !estado.cubrecanto) estado.cubrecanto = resultado.cubreCanto;
+
+    estado.misFilas = resultado.piezas.map(p => ({
+      cantidad: p.cantidad ?? '',
+      ladoA: p.ladoA ?? '',
+      ladoB: p.ladoB ?? '',
+      enchapeA1: !!p.enchapeA1,
+      enchapeA2: !!p.enchapeA2,
+      enchapeB1: !!p.enchapeB1,
+      enchapeB2: !!p.enchapeB2,
+    }));
+    guardarEstado();
+    renderMia();
+
+    estadoP.textContent = `Se detectaron ${resultado.piezas.length} piezas. Revisa cada valor en la tabla de arriba antes de comparar — la IA puede equivocarse.`;
   } catch (err) {
     console.error(err);
-    textarea.value = 'No se pudo analizar la imagen. Transcribe los datos manualmente en la tabla de arriba.';
+    estadoP.textContent = 'No se pudo analizar la foto (' + (err.message || 'error desconocido') + '). Captura los datos manualmente en la tabla de arriba.';
   }
 });
 
