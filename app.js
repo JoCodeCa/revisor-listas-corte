@@ -36,6 +36,16 @@ function guardarEstado() {
 
 // ===================== MI LISTA =====================
 
+// Campos numéricos que la IA califica con un nivel de confianza (1=dudoso, 2=revisar, 3=claro)
+// y el nombre del campo de confianza correspondiente en la fila.
+const CAMPOS_CON_CONFIANZA = { cantidad: 'confianzaCantidad', ladoA: 'confianzaLadoA', ladoB: 'confianzaLadoB' };
+
+function claseConfianza(nivel) {
+  if (nivel === 1) return 'confianza-baja';
+  if (nivel === 2) return 'confianza-media';
+  return '';
+}
+
 function renderMia() {
   document.getElementById('mia-material').value = estado.material;
   document.getElementById('mia-cubrecanto').value = estado.cubrecanto;
@@ -46,9 +56,9 @@ function renderMia() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${i + 1}</td>
-      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="ladoA" value="${fila.ladoA}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="ladoB" value="${fila.ladoB}"></td>
+      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}" class="${claseConfianza(fila.confianzaCantidad)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="ladoA" value="${fila.ladoA}" class="${claseConfianza(fila.confianzaLadoA)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="ladoB" value="${fila.ladoB}" class="${claseConfianza(fila.confianzaLadoB)}"></td>
       <td><input type="checkbox" data-campo="enchapeA1" ${fila.enchapeA1 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeA2" ${fila.enchapeA2 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeB1" ${fila.enchapeB1 ? 'checked' : ''}></td>
@@ -60,6 +70,12 @@ function renderMia() {
       const evento = input.type === 'checkbox' ? 'change' : 'input';
       input.addEventListener(evento, () => {
         fila[campo] = input.type === 'checkbox' ? input.checked : input.value;
+        // Ya lo revisó/corrigió el usuario: quita la marca de confianza de la IA.
+        const campoConfianza = CAMPOS_CON_CONFIANZA[campo];
+        if (campoConfianza && fila[campoConfianza] !== undefined) {
+          delete fila[campoConfianza];
+          input.classList.remove('confianza-baja', 'confianza-media');
+        }
         guardarEstado();
       });
     });
@@ -318,6 +334,9 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
         enchapeA2: !!p.enchapeA2,
         enchapeB1: !!p.enchapeB1,
         enchapeB2: !!p.enchapeB2,
+        confianzaCantidad: p.confianzaCantidad,
+        confianzaLadoA: p.confianzaLadoA,
+        confianzaLadoB: p.confianzaLadoB,
       })));
       totalPiezas += resultado.piezas.length;
     } catch (err) {

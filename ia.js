@@ -84,6 +84,12 @@ const esquemaPiezaHoja = Schema.object({
     enchapeA2: Schema.boolean(),
     enchapeB1: Schema.boolean(),
     enchapeB2: Schema.boolean(),
+    // Qué tan clara estaba la letra para cada número: 3=clara, 2=razonable pero podría
+    // confundirse, 1=dudosa/casi adivinando. Así el usuario solo revisa lo marcado, en
+    // vez de tener que releer toda la hoja contra la pantalla.
+    confianzaCantidad: Schema.number(),
+    confianzaLadoA: Schema.number(),
+    confianzaLadoB: Schema.number(),
   },
 });
 
@@ -108,7 +114,16 @@ Lee SOLO las filas de la tabla que tengan datos (ignora las filas vacías).
 Para cada fila devuelve: cantidad (entero), ladoA y ladoB (números, pueden tener decimales, usa punto
 decimal, no coma), y si cada casilla de enchape A1/A2/B1/B2 está marcada (true) o vacía (false).
 Prioriza la precisión numérica: si una cifra es ambigua, usa tu mejor estimación según el contexto
-(por ejemplo, medidas de piezas de un mueble suelen ser razonables, no extremas).`;
+(por ejemplo, medidas de piezas de un mueble suelen ser razonables, no extremas).
+
+Además, para cantidad, ladoA y ladoB por separado, califica qué tan clara estaba la letra escrita a mano
+(confianzaCantidad, confianzaLadoA, confianzaLadoB), siendo honesto y crítico contigo mismo:
+- 3 = la cifra se lee con toda claridad, no hay duda razonable.
+- 2 = se lee, pero hay algo que podría confundirse (un dígito con trazo ambiguo, un punto decimal que
+  podría ser una mancha, un número parecido a otro, letra apretada o encimada).
+- 1 = es difícil de leer, estás adivinando o completando con el contexto más que leyendo el trazo.
+No califiques todo como 3 por default: el usuario va a confiar en tu palabra para NO revisar lo que
+marques como 3, así que sé estricto.`;
 
 async function leerHojaConIA(file) {
   return preguntarConArchivo(modeloHoja, PROMPT_HOJA, file);

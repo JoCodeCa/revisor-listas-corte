@@ -3,6 +3,8 @@
   --verde-claro: #e6f3ef;
   --rojo: #b3261e;
   --rojo-claro: #fbe9e7;
+  --amarillo: #8a6100;
+  --amarillo-claro: #fff6e0;
   --borde: #d8dde1;
   --texto: #1c2024;
   --texto-suave: #5a6168;
@@ -105,6 +107,27 @@ td input[type="number"], td input[type="text"] {
 }
 td input:focus { border-color: var(--verde); background: white; outline: none; }
 td input[type="checkbox"] { width: 18px; height: 18px; }
+
+/* Qué tan segura estaba la IA al leer un número de la hoja escrita a mano:
+   sin color = clara, amarillo = revisar, rojo = dudosa. Se quita sola al corregir el valor. */
+td input.confianza-media:not(:focus) { background: var(--amarillo-claro); }
+td input.confianza-baja:not(:focus) { background: var(--rojo-claro); }
+
+.leyenda-confianza {
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+  margin: -0.4rem 0 0.6rem;
+}
+.muestra-confianza {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin: 0 0.15rem 0 0.5rem;
+  vertical-align: middle;
+}
+.muestra-confianza.confianza-media { background: var(--amarillo-claro); border: 1px solid var(--amarillo); }
+.muestra-confianza.confianza-baja { background: var(--rojo-claro); border: 1px solid var(--rojo); }
 
 /* Quita las flechitas de +/- de los campos numéricos: no sirven en celular
    (ahí se usa el teclado numérico) y le robaban espacio a columnas angostas. */
