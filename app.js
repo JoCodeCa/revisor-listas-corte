@@ -485,6 +485,29 @@ document.getElementById('btn-borrar-todo').addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
+// ===================== CONFIGURACIÓN =====================
+
+const dialogoConfig = document.getElementById('dialogo-config');
+
+document.getElementById('btn-config').addEventListener('click', () => {
+  const actual = window.Tema ? Tema.obtener() : 'auto';
+  dialogoConfig.querySelectorAll('input[name="tema"]').forEach(r => { r.checked = r.value === actual; });
+  dialogoConfig.showModal();
+});
+
+document.getElementById('btn-cerrar-config').addEventListener('click', () => dialogoConfig.close());
+
+// Cerrar al tocar fuera del cuadro (el clic en el fondo oscuro llega al propio <dialog>).
+dialogoConfig.addEventListener('click', (e) => {
+  if (e.target === dialogoConfig) dialogoConfig.close();
+});
+
+dialogoConfig.querySelectorAll('input[name="tema"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    if (radio.checked && window.Tema) Tema.guardar(radio.value);
+  });
+});
+
 // ===================== COMPARTIR DESDE WHATSAPP (u otra app) =====================
 // Flujo: WhatsApp comparte el archivo -> el service worker lo intercepta y lo guarda
 // en caché -> redirige a compartir.html (pregunta "mi lista" o "proveedor") -> esa

@@ -1,7 +1,11 @@
 :root {
+  color-scheme: light;
   --verde: #1f6f54;
+  --verde-solido: #1f6f54;       /* fondos sólidos con texto blanco (encabezado, botón principal) */
+  --verde-solido-hover: #185c45;
   --verde-claro: #e6f3ef;
   --rojo: #b3261e;
+  --rojo-solido: #b3261e;
   --rojo-claro: #fbe9e7;
   --amarillo: #8a6100;
   --amarillo-claro: #fff6e0;
@@ -9,7 +13,46 @@
   --texto: #1c2024;
   --texto-suave: #5a6168;
   --fondo: #f6f7f8;
-  --blanco: #ffffff;
+  --blanco: #ffffff;              /* superficie de paneles y campos */
+}
+
+/* Modo oscuro: se aplica si el usuario lo eligió en Configuración, o si dejó
+   "Automático" y su dispositivo está en modo oscuro. tema.js pone data-tema en <html>. */
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+  --verde: #5cc49c;
+  --verde-solido: #1f6f54;
+  --verde-solido-hover: #268565;
+  --verde-claro: #16352b;
+  --rojo: #f28b82;
+  --rojo-solido: #b3261e;
+  --rojo-claro: #3d1f1d;
+  --amarillo: #e8b84a;
+  --amarillo-claro: #3d3014;
+  --borde: #343a40;
+  --texto: #e6e8ea;
+  --texto-suave: #9aa3ab;
+  --fondo: #121417;
+  --blanco: #1c1f23;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+    --verde: #5cc49c;
+    --verde-solido: #1f6f54;
+    --verde-solido-hover: #268565;
+    --verde-claro: #16352b;
+    --rojo: #f28b82;
+    --rojo-solido: #b3261e;
+    --rojo-claro: #3d1f1d;
+    --amarillo: #e8b84a;
+    --amarillo-claro: #3d3014;
+    --borde: #343a40;
+    --texto: #e6e8ea;
+    --texto-suave: #9aa3ab;
+    --fondo: #121417;
+    --blanco: #1c1f23;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -22,7 +65,8 @@ body {
 }
 
 .app-header {
-  background: var(--verde);
+  position: relative;
+  background: var(--verde-solido);
   color: white;
   padding: 1.25rem 1rem;
   text-align: center;
@@ -121,7 +165,7 @@ td input[type="number"], td input[type="text"] {
   border-radius: 4px;
   font-size: 0.9rem;
 }
-td input:focus { border-color: var(--verde); background: white; outline: none; }
+td input:focus { border-color: var(--verde); background: var(--blanco); outline: none; }
 td input[type="checkbox"] { width: 18px; height: 18px; }
 
 /* Qué tan segura estaba la IA al leer un número de la hoja escrita a mano:
@@ -189,14 +233,14 @@ td input[type="number"]::-webkit-inner-spin-button {
 }
 .btn-secundario:hover { background: var(--fondo); }
 .btn-primario {
-  background: var(--verde);
+  background: var(--verde-solido);
   color: white;
-  border-color: var(--verde);
+  border-color: var(--verde-solido);
   font-weight: 600;
   font-size: 1rem;
   padding: 0.7rem 1.4rem;
 }
-.btn-primario:hover { background: #185c45; }
+.btn-primario:hover { background: var(--verde-solido-hover); }
 .btn-archivo { position: relative; }
 
 .panel-comparar {
@@ -237,6 +281,7 @@ td input[type="number"]::-webkit-inner-spin-button {
   color: var(--texto-suave);
   margin-bottom: 0.6rem;
 }
+.info-proveedor[hidden] { display: none; }
 .info-proveedor span { background: var(--fondo); padding: 0.3rem 0.6rem; border-radius: 6px; }
 
 .resumen-comparacion {
@@ -266,8 +311,8 @@ td input[type="number"]::-webkit-inner-spin-button {
   font-size: 0.78rem;
   font-weight: 600;
 }
-.fila-ok .estado-pill { background: var(--verde); color: white; }
-.fila-error .estado-pill { background: var(--rojo); color: white; }
+.fila-ok .estado-pill { background: var(--verde-solido); color: white; }
+.fila-error .estado-pill { background: var(--rojo-solido); color: white; }
 
 #texto-correcciones {
   width: 100%;
@@ -278,6 +323,72 @@ td input[type="number"]::-webkit-inner-spin-button {
   font-size: 0.85rem;
 }
 
+input, textarea, select { color: var(--texto); }
+.campos-encabezado input[type="text"], .campo-telefono input,
+.pegar-texto textarea, .ocr-resultado textarea, #texto-correcciones { background: var(--blanco); }
+
+/* ===================== CONFIGURACIÓN ===================== */
+.btn-config {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+.btn-config:hover { background: rgba(255,255,255,0.15); }
+.btn-config svg { width: 1.25rem; height: 1.25rem; }
+
+.dialogo-config {
+  width: min(420px, calc(100vw - 2rem));
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: var(--blanco);
+  color: var(--texto);
+}
+.dialogo-config::backdrop { background: rgba(0,0,0,0.45); }
+.dialogo-config h2 { margin: 0 0 1rem; font-size: 1.15rem; }
+.dialogo-config fieldset { border: none; margin: 0; padding: 0; }
+.dialogo-config legend { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5rem; padding: 0; }
+
+.opciones-tema {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.opciones-tema label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.6rem 0.3rem;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.opciones-tema label:has(input:checked) {
+  border-color: var(--verde);
+  background: var(--verde-claro);
+  color: var(--verde);
+  font-weight: 600;
+}
+.opciones-tema input { position: absolute; opacity: 0; pointer-events: none; }
+.opciones-tema label:has(input:focus-visible) { outline: 2px solid var(--verde); outline-offset: 2px; }
+.icono-tema { font-size: 1.3rem; line-height: 1; }
+.nota-config { font-size: 0.78rem; color: var(--texto-suave); margin: 0.6rem 0 0; }
+.dialogo-config .acciones-fila { justify-content: flex-end; margin-top: 1.25rem; }
+
 .app-footer {
   text-align: center;
   font-size: 0.78rem;
@@ -286,7 +397,8 @@ td input[type="number"]::-webkit-inner-spin-button {
 }
 
 @media (max-width: 600px) {
-  .app-header h1 { font-size: 1.15rem; }
+  .app-header h1 { font-size: 1.15rem; padding: 0 2.6rem; }
+  .btn-config { top: 0.6rem; right: 0.6rem; }
   .panel { padding: 0.75rem; }
 
   #tabla-mia, #tabla-proveedor { font-size: 0.68rem; }
