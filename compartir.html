@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compartir — Revisor de Listas de Corte</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1f6f54">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>Revisor de Listas de Corte</h1>
+  <p class="subtitulo">¿Qué es lo que compartiste?</p>
+</header>
+
+<main>
+  <section class="panel" style="text-align:center;">
+    <p id="compartir-info">Preparando lo que compartiste...</p>
+    <div class="acciones-fila" style="justify-content:center;">
+      <button type="button" id="btn-es-mia" class="btn btn-primario">Es mi lista</button>
+      <button type="button" id="btn-es-proveedor" class="btn btn-primario">Es el reporte del proveedor</button>
+    </div>
+    <p class="estado-texto" style="margin-top:1rem;">
+      <a href="index.html">Cancelar y abrir la app normal</a>
+    </p>
+  </section>
+</main>
+
+<script>
+  const parametros = new URLSearchParams(location.search);
+  const infoP = document.getElementById('compartir-info');
+
+  if (parametros.get('error')) {
+    infoP.textContent = 'No se pudo recibir el archivo compartido. Intenta subirlo manualmente desde la app.';
+    document.getElementById('btn-es-mia').disabled = true;
+    document.getElementById('btn-es-proveedor').disabled = true;
+  } else {
+    infoP.textContent = 'Elige a cuál de las dos listas pertenece lo que compartiste:';
+  }
+
+  document.getElementById('btn-es-mia').addEventListener('click', () => {
+    location.href = 'index.html?compartido=mia';
+  });
+  document.getElementById('btn-es-proveedor').addEventListener('click', () => {
+    location.href = 'index.html?compartido=proveedor';
+  });
+</script>
+</body>
+</html>

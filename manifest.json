@@ -7,5 +7,15 @@
   "theme_color": "#1f6f54",
   "icons": [
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
-  ]
+  ],
+  "share_target": {
+    "action": "/compartir",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        { "name": "archivos", "accept": ["image/*", "application/pdf", ".pdf"] }
+      ]
+    }
+  }
 }

@@ -225,8 +225,7 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
   return { reporte, conCubrecanto: false };
 }
 
-document.getElementById('input-pdf').addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files);
+async function procesarArchivosProveedor(files) {
   if (files.length === 0) return;
   const estadoTexto = document.getElementById('pdf-estado');
 
@@ -260,6 +259,10 @@ document.getElementById('input-pdf').addEventListener('change', async (e) => {
     const notaError = huboError ? ' — algún archivo falló, revisa' : '';
     estadoTexto.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} archivo(s)${notaCubrecanto}${notaError}. Revísalas antes de comparar.`;
   }
+}
+
+document.getElementById('input-pdf').addEventListener('change', (e) => {
+  procesarArchivosProveedor(Array.from(e.target.files));
 });
 
 document.getElementById('btn-procesar-texto').addEventListener('click', () => {
@@ -298,8 +301,7 @@ async function ocrImagen(file) {
   return data.text.trim();
 }
 
-document.getElementById('input-foto-ocr').addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files);
+async function procesarFotosMia(files) {
   if (files.length === 0) return;
 
   const contenedor = document.getElementById('ocr-resultado');
@@ -353,6 +355,10 @@ document.getElementById('input-foto-ocr').addEventListener('change', async (e) =
   } else {
     estadoP.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} foto(s)${huboError ? ' (alguna foto falló, revisa)' : ''}. Revisa cada valor en la tabla de arriba antes de comparar — la IA puede equivocarse.`;
   }
+}
+
+document.getElementById('input-foto-ocr').addEventListener('change', (e) => {
+  procesarFotosMia(Array.from(e.target.files));
 });
 
 // ===================== COMPARAR =====================
@@ -471,8 +477,60 @@ document.getElementById('btn-borrar-todo').addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
+// ===================== COMPARTIR DESDE WHATSAPP (u otra app) =====================
+// Flujo: WhatsApp comparte el archivo -> el service worker lo intercepta y lo guarda
+// en caché -> redirige a compartir.html (pregunta "mi lista" o "proveedor") -> esa
+// página redirige aquí con ?compartido=mia|proveedor -> aquí se recupera el archivo
+// de la caché y se procesa igual que si se hubiera subido con el botón normal.
+
+const CACHE_COMPARTIDOS = 'compartidos-v1';
+
+async function recuperarArchivosCompartidos() {
+  if (!('caches' in window)) return [];
+  const cache = await caches.open(CACHE_COMPARTIDOS);
+  const respuestaMeta = await cache.match('/compartido-meta');
+  if (!respuestaMeta) return [];
+  const meta = await respuestaMeta.json();
+
+  const archivos = [];
+  for (const item of meta) {
+    const respuesta = await cache.match(item.clave);
+    if (!respuesta) continue;
+    const blob = await respuesta.blob();
+    archivos.push(new File([blob], item.nombre || 'compartido', { type: item.tipo || blob.type }));
+    await cache.delete(item.clave);
+  }
+  await cache.delete('/compartido-meta');
+  return archivos;
+}
+
+async function revisarArchivoCompartido() {
+  const parametros = new URLSearchParams(location.search);
+  const destino = parametros.get('compartido');
+  if (!destino) return;
+
+  // Limpia la URL para que recargar la página no vuelva a procesar lo mismo.
+  history.replaceState(null, '', location.pathname);
+
+  const archivos = await recuperarArchivosCompartidos();
+  if (archivos.length === 0) return;
+
+  if (destino === 'mia') {
+    await procesarFotosMia(archivos);
+    document.getElementById('panel-mia')?.scrollIntoView({ behavior: 'smooth' });
+  } else if (destino === 'proveedor') {
+    await procesarArchivosProveedor(archivos);
+    document.getElementById('panel-proveedor')?.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(err => console.error('No se pudo registrar el service worker:', err));
+}
+
 // ===================== INIT =====================
 
 cargarEstado();
 renderMia();
 renderProveedor();
+revisarArchivoCompartido();
