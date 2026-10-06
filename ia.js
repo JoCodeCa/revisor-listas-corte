@@ -111,8 +111,10 @@ const esquemaPiezaReporte = Schema.object({
     cantidad: Schema.number(),
     base: Schema.number(),
     altura: Schema.number(),
-    ladoAEnchapado: Schema.number(),
-    ladoBEnchapado: Schema.number(),
+    bordeSuperior: Schema.boolean(),
+    bordeInferior: Schema.boolean(),
+    bordeIzquierdo: Schema.boolean(),
+    bordeDerecho: Schema.boolean(),
     observacion: Schema.string(),
   },
   optionalProperties: ['observacion'],
@@ -127,33 +129,51 @@ const esquemaReporte = Schema.object({
   optionalProperties: ['cliente', 'material'],
 });
 
-const modeloReporte = crearModelo(esquemaReporte);
+// Para esta parte usamos el modelo completo (no el "lite"): distinguir una línea
+// gruesa vertical de una horizontal en un dibujo diminuto es un detalle visual fino,
+// y el modelo lite se equivocaba seguido (sobre todo en piezas muy delgadas/alargadas).
+const modeloReporte = getGenerativeModel(ai, {
+  model: 'gemini-3.8-flash',
+  generationConfig: { responseMimeType: 'application/json', responseSchema: esquemaReporte },
+});
 
 const PROMPT_REPORTE = `Este es un reporte generado por un software de optimización de corte de tableros
 (melamina/MDF/triplay) para un taller de carpintería. Tiene una sección "Piezas ubicadas" con una tabla de
 columnas: Esquema (un dibujo del rectángulo de la pieza), Cant, Base, Altura, Observación.
 
-Cada rectángulo del "Esquema" puede tener una o más de sus 4 orillas dibujadas con una línea más gruesa y de
-color (normalmente azul) en vez de la línea delgada normal — esa línea gruesa indica que esa orilla lleva
-cubrecanto (tapacanto/enchape). Si el rectángulo no tiene ninguna línea gruesa de color, la pieza no lleva
-cubrecanto (a veces esto se confirma con el texto "SIN CH" en la columna Observación).
+Cada rectángulo del "Esquema" tiene 4 orillas: superior, inferior, izquierda, derecha. Cada orilla puede estar
+dibujada con una línea DELGADA normal, o con una línea más GRUESA y de color (normalmente azul) — esa línea
+gruesa indica que esa orilla específica lleva cubrecanto (tapacanto/enchape). Si el rectángulo no tiene
+ninguna línea gruesa, la pieza no lleva cubrecanto (a veces esto se confirma con el texto "SIN CH" en la
+columna Observación — úsalo como pista: si dice "SIN CH", las 4 orillas deben ser false).
 
-Regla importante para contar el cubrecanto de cada pieza:
-- Una línea gruesa VERTICAL (en la orilla izquierda o derecha del rectángulo) cuenta como "lado A" enchapado.
-- Una línea gruesa HORIZONTAL (en la orilla de arriba o abajo del rectángulo) cuenta como "lado B" enchapado.
-Un rectángulo puede tener 0, 1 o 2 líneas verticales, y 0, 1 o 2 líneas horizontales, de forma independiente.
+Para cada pieza, examina sus 4 orillas UNA POR UNA, con cuidado (muchas piezas son rectángulos muy delgados
+y alargados, donde es fácil confundir una orilla corta con una larga):
+- ¿La orilla de ARRIBA es gruesa/de color? (bordeSuperior)
+- ¿La orilla de ABAJO es gruesa/de color? (bordeInferior)
+- ¿La orilla IZQUIERDA es gruesa/de color? (bordeIzquierdo)
+- ¿La orilla DERECHA es gruesa/de color? (bordeDerecho)
 
 Lee SOLO las filas de la tabla "Piezas ubicadas" que tengan datos (ignora filas vacías y la tabla de
 "Lista de Planchas Utilizadas", que es una sección distinta).
 Para cada fila devuelve: cantidad (entero), base y altura (números, pueden tener decimales, usa punto
-decimal), ladoAEnchapado (0, 1 o 2: cuántas líneas gruesas verticales tiene el dibujo), ladoBEnchapado
-(0, 1 o 2: cuántas líneas gruesas horizontales), y observacion (el texto de esa columna si tiene, si no
+decimal), las 4 orillas (true/false cada una), y observacion (el texto de esa columna si tiene, si no
 cadena vacía).
 También, si puedes leerlos, el nombre del cliente y la descripción del material del encabezado del reporte.
-Prioriza la precisión numérica y en el conteo de líneas gruesas: si tienes duda, usa tu mejor estimación.`;
+Prioriza la precisión: revisa cada orilla con calma antes de responder, no adivines rápido.`;
 
 async function leerReporteProveedorConIA(file) {
-  return preguntarConArchivo(modeloReporte, PROMPT_REPORTE, file);
+  const resultado = await preguntarConArchivo(modeloReporte, PROMPT_REPORTE, file);
+  resultado.piezas = (resultado.piezas || []).map(p => ({
+    cantidad: p.cantidad,
+    base: p.base,
+    altura: p.altura,
+    // Vertical (izquierda/derecha) = lado A; horizontal (arriba/abajo) = lado B — ver engine.js.
+    ladoAEnchapado: (p.bordeIzquierdo ? 1 : 0) + (p.bordeDerecho ? 1 : 0),
+    ladoBEnchapado: (p.bordeSuperior ? 1 : 0) + (p.bordeInferior ? 1 : 0),
+    observacion: p.observacion || '',
+  }));
+  return resultado;
 }
 
 window.leerHojaConIA = leerHojaConIA;
