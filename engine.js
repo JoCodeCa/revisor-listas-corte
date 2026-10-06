@@ -249,9 +249,46 @@ function parseReporteProveedor(texto) {
   };
 }
 
+// Arma una línea breve, dirigida al proveedor (no al taller), por cada pieza con problema.
+// A diferencia de r.mensaje (pensado para la tabla de resultados, en 1a persona hacia el
+// usuario), esto se redacta para que el proveedor entienda qué corregir sin contexto extra.
+function lineaParaProveedor(r) {
+  const dimMia = r.mia ? `${r.mia.ladoA_cm}x${r.mia.ladoB_cm} cm` : null;
+  const dimProv = r.proveedor ? `${r.proveedor.base_mm}x${r.proveedor.altura_mm} mm` : null;
+
+  switch (r.estado) {
+    case 'cantidad':
+      return `Pieza ${dimMia}: pedí ${r.mia.cantidad} pza, capturaste ${r.proveedor.cantidad}`;
+    case 'falta':
+      return `Pieza ${dimMia} (x${r.mia.cantidad}): no aparece en tu confirmación`;
+    case 'invertida':
+      return `Pieza ${dimMia} (x${r.mia.cantidad}): lados cruzados (capturaste ${dimProv}) — revisar la veta`;
+    case 'enchape':
+      return `Pieza ${dimMia} (x${r.mia.cantidad}): cubrecanto no coincide — pedí ${r.mia.contarA} lado(s) A y ${r.mia.contarB} lado(s) B, capturaste ${r.proveedor.ladoAEnchapado} y ${r.proveedor.ladoBEnchapado}`;
+    case 'sobra':
+      return `Pieza ${dimProv} (x${r.proveedor.cantidad}): no la pedí`;
+    default:
+      return r.mensaje;
+  }
+}
+
+// Mensaje completo listo para enviar al proveedor (por ejemplo por WhatsApp) con solo
+// las piezas que tienen algún problema. Devuelve '' si no hay nada que corregir.
+function generarMensajeProveedor(resultados, opciones = {}) {
+  const problemas = resultados.filter(r => r.estado !== 'ok');
+  if (problemas.length === 0) return '';
+
+  const asunto = opciones.material ? ` del pedido de ${opciones.material}` : ' del pedido';
+  const encabezado = `Hola, revisando tu confirmación${asunto} encontré estas diferencias, ¿me las corriges?`;
+  const lineas = problemas.map((r, i) => `${i + 1}) ${lineaParaProveedor(r)}`);
+
+  return [encabezado, '', ...lineas, '', 'Gracias!'].join('\n');
+}
+
 const API = {
   cmAMm,
   comparar,
+  generarMensajeProveedor,
   normalizarMisPiezas,
   normalizarPiezasProveedor,
   normalizaNumero,

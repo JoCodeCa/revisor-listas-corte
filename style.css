@@ -78,6 +78,22 @@ main {
   font-size: 0.95rem;
 }
 
+.campo-telefono {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  margin: 0.8rem 0;
+}
+.campo-telefono input {
+  padding: 0.5rem;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  max-width: 260px;
+}
+
 .tabla-scroll { overflow-x: auto; }
 
 table {

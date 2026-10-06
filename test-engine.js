@@ -1,7 +1,7 @@
 // Pruebas rápidas del motor de comparación usando el caso real de las dos hojas de ejemplo.
 'use strict';
 const assert = require('assert');
-const { cmAMm, comparar, parseReporteProveedor } = require('./engine.js');
+const { cmAMm, comparar, parseReporteProveedor, generarMensajeProveedor } = require('./engine.js');
 
 // --- cmAMm ---
 assert.strictEqual(cmAMm(187.6), 1876);
@@ -181,5 +181,19 @@ console.log('OK: detecta cubrecanto faltante/incorrecto por lado');
 r = comparar(misPiezasConEnchape, piezasProveedorCorrectas.slice(0, 1).map(p => ({ ...p, cantidad: 5, base: 1876, altura: 290 })));
 assert.strictEqual(r.resultados.find(x => x.estado === 'enchape'), undefined, 'sin datos de enchape del proveedor no debe marcarse error de cubrecanto');
 console.log('OK: no compara cubrecanto cuando el proveedor no trae esa informacion');
+
+// --- generarMensajeProveedor: vacio cuando no hay errores ---
+r = comparar(misPiezas, piezasProveedorCorrectas);
+assert.strictEqual(generarMensajeProveedor(r.resultados), '', 'sin errores no debe generar mensaje');
+console.log('OK: generarMensajeProveedor no genera nada si todo coincide');
+
+// --- generarMensajeProveedor: mensaje dirigido al proveedor, no al taller ---
+r = comparar(misPiezas, provCantidadMal);
+const mensaje = generarMensajeProveedor(r.resultados, { material: 'MDF 18mm' });
+assert.ok(mensaje.includes('MDF 18mm'), 'debe mencionar el material si se pasa');
+assert.ok(mensaje.includes('pedí'), 'debe estar redactado en 1a persona hacia el proveedor');
+assert.ok(!mensaje.includes('el proveedor'), 'no debe hablar del proveedor en 3a persona dentro de su propio mensaje');
+assert.ok(/^1\)/m.test(mensaje), 'debe numerar los puntos');
+console.log('OK: generarMensajeProveedor redacta un mensaje dirigido al proveedor');
 
 console.log('\nTodas las pruebas pasaron.');

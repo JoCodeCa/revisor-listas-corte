@@ -19,6 +19,7 @@ let estado = {
   provFilas: [],
   provCliente: '',
   provMaterial: '',
+  proveedorTelefono: '',
 };
 
 function cargarEstado() {
@@ -372,6 +373,19 @@ function estadoAClase(estadoPieza) {
   return 'fila-error';
 }
 
+function actualizarEnlaceWhatsapp(texto) {
+  const telefono = (estado.proveedorTelefono || '').replace(/\D/g, '');
+  const base = telefono ? `https://wa.me/${telefono}` : 'https://wa.me/';
+  document.getElementById('btn-whatsapp').href = `${base}?text=${encodeURIComponent(texto)}`;
+}
+
+document.getElementById('proveedor-telefono').addEventListener('input', (e) => {
+  estado.proveedorTelefono = e.target.value;
+  guardarEstado();
+  const texto = document.getElementById('texto-correcciones').value;
+  if (texto) actualizarEnlaceWhatsapp(texto);
+});
+
 document.getElementById('btn-comparar').addEventListener('click', () => {
   const { resultados, resumen } = Engine.comparar(estado.misFilas, estado.provFilas);
 
@@ -408,16 +422,9 @@ document.getElementById('btn-comparar').addEventListener('click', () => {
   const panelCorrecciones = document.getElementById('panel-correcciones');
   if (resumen.conError > 0) {
     panelCorrecciones.hidden = false;
-    const lineas = resultados
-      .filter(r => r.estado !== 'ok')
-      .map(r => `- ${r.mensaje}`);
-    const texto = [
-      `Correcciones a la lista de corte${estado.material ? ' - ' + estado.material : ''}:`,
-      '',
-      ...lineas,
-    ].join('\n');
+    const texto = Engine.generarMensajeProveedor(resultados, { material: estado.material });
     document.getElementById('texto-correcciones').value = texto;
-    document.getElementById('btn-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    actualizarEnlaceWhatsapp(texto);
   } else {
     panelCorrecciones.hidden = true;
   }
@@ -461,8 +468,9 @@ document.getElementById('btn-borrar-todo').addEventListener('click', () => {
     provFilas: [],
     provCliente: '',
     provMaterial: '',
+    proveedorTelefono: estado.proveedorTelefono, // el teléfono del proveedor no cambia por pedido, se conserva
   };
-  try { localStorage.removeItem(LS_KEY); } catch (e) { /* almacenamiento no disponible */ }
+  guardarEstado();
 
   renderMia();
   renderProveedor();
@@ -533,4 +541,5 @@ if ('serviceWorker' in navigator) {
 cargarEstado();
 renderMia();
 renderProveedor();
+document.getElementById('proveedor-telefono').value = estado.proveedorTelefono || '';
 revisarArchivoCompartido();
