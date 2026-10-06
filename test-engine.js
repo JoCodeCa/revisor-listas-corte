@@ -162,7 +162,7 @@ const misPiezasConEnchape = [
   { no: 1, cantidad: 5, ladoA: 187.6, ladoB: 29, enchapeA1: true, enchapeA2: false, enchapeB1: true, enchapeB2: true },
 ];
 const provConEnchapeOK = [
-  { cantidad: 5, base: 1876, altura: 290, ladoAEnchapado: 1, ladoBEnchapado: 2 },
+  { cantidad: 5, base: 1876, altura: 290, enchapeA1: true, enchapeA2: false, enchapeB1: true, enchapeB2: true },
 ];
 r = comparar(misPiezasConEnchape, provConEnchapeOK);
 assert.strictEqual(r.resumen.conError, 0, 'el cubrecanto coincide (1 lado A, 2 lados B)');
@@ -170,7 +170,7 @@ console.log('OK: cubrecanto coincide cuando los conteos de lados A/B son iguales
 
 // --- cubrecanto: detecta cuando el proveedor marco menos lados de los pedidos ---
 const provConEnchapeMal = [
-  { cantidad: 5, base: 1876, altura: 290, ladoAEnchapado: 0, ladoBEnchapado: 2 },
+  { cantidad: 5, base: 1876, altura: 290, enchapeA1: false, enchapeA2: false, enchapeB1: true, enchapeB2: true },
 ];
 r = comparar(misPiezasConEnchape, provConEnchapeMal);
 const errEnchape = r.resultados.find(x => x.estado === 'enchape');

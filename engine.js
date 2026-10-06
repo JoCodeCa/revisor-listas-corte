@@ -34,27 +34,28 @@ function normalizarMisPiezas(filas) {
     }));
 }
 
-// Convierte a 0/1/2 un valor de conteo de cubrecanto, o null si no viene (p.ej. cuando
-// el reporte del proveedor se leyó solo como texto, sin poder ver el dibujo del Esquema).
-function aConteoEnchape(valor) {
-  if (valor === undefined || valor === null || valor === '') return null;
-  const n = Number(valor);
-  return Number.isFinite(n) ? n : null;
+// El reporte del proveedor solo trae datos de cubrecanto cuando se leyó con IA (puede
+// ver el dibujo del Esquema); si vino de texto (PDF/OCR/pegado), estos campos no existen.
+function tieneDatosEnchape(f) {
+  return f.enchapeA1 !== undefined || f.enchapeA2 !== undefined || f.enchapeB1 !== undefined || f.enchapeB2 !== undefined;
 }
 
 // Normaliza las piezas extraídas del reporte del proveedor (ya en mm).
 function normalizarPiezasProveedor(filas) {
   return filas
     .filter(f => Number(f.cantidad) > 0)
-    .map((f, idx) => ({
-      origenIndex: idx,
-      cantidad: Number(f.cantidad),
-      base_mm: Number(f.base),
-      altura_mm: Number(f.altura),
-      observacion: f.observacion || '',
-      ladoAEnchapado: aConteoEnchape(f.ladoAEnchapado),
-      ladoBEnchapado: aConteoEnchape(f.ladoBEnchapado),
-    }));
+    .map((f, idx) => {
+      const conDatosEnchape = tieneDatosEnchape(f);
+      return {
+        origenIndex: idx,
+        cantidad: Number(f.cantidad),
+        base_mm: Number(f.base),
+        altura_mm: Number(f.altura),
+        observacion: f.observacion || '',
+        ladoAEnchapado: conDatosEnchape ? (f.enchapeA1 ? 1 : 0) + (f.enchapeA2 ? 1 : 0) : null,
+        ladoBEnchapado: conDatosEnchape ? (f.enchapeB1 ? 1 : 0) + (f.enchapeB2 ? 1 : 0) : null,
+      };
+    });
 }
 
 // Compara "mis piezas" contra las piezas que capturó el proveedor.

@@ -6,7 +6,11 @@ const filaMiaVacia = () => ({
   cantidad: '', ladoA: '', ladoB: '',
   enchapeA1: false, enchapeA2: false, enchapeB1: false, enchapeB2: false,
 });
-const filaProvVacia = () => ({ cantidad: '', base: '', altura: '', ladoAEnchapado: '', ladoBEnchapado: '', observacion: '' });
+const filaProvVacia = () => ({
+  cantidad: '', base: '', altura: '',
+  enchapeA1: false, enchapeA2: false, enchapeB1: false, enchapeB2: false,
+  observacion: '',
+});
 
 let estado = {
   material: '',
@@ -97,14 +101,20 @@ function renderProveedor() {
       <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="base" value="${fila.base}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="altura" value="${fila.altura}"></td>
-      <td><input type="number" min="0" max="2" step="1" data-campo="ladoAEnchapado" value="${fila.ladoAEnchapado ?? ''}"></td>
-      <td><input type="number" min="0" max="2" step="1" data-campo="ladoBEnchapado" value="${fila.ladoBEnchapado ?? ''}"></td>
+      <td><input type="checkbox" data-campo="enchapeA1" ${fila.enchapeA1 ? 'checked' : ''}></td>
+      <td><input type="checkbox" data-campo="enchapeA2" ${fila.enchapeA2 ? 'checked' : ''}></td>
+      <td><input type="checkbox" data-campo="enchapeB1" ${fila.enchapeB1 ? 'checked' : ''}></td>
+      <td><input type="checkbox" data-campo="enchapeB2" ${fila.enchapeB2 ? 'checked' : ''}></td>
       <td><input type="text" data-campo="observacion" value="${fila.observacion || ''}"></td>
       <td><button type="button" class="btn-eliminar" title="Eliminar pieza">✕</button></td>
     `;
     tr.querySelectorAll('[data-campo]').forEach(input => {
       const campo = input.dataset.campo;
-      input.addEventListener('input', () => { fila[campo] = input.value; guardarEstado(); });
+      const evento = input.type === 'checkbox' ? 'change' : 'input';
+      input.addEventListener(evento, () => {
+        fila[campo] = input.type === 'checkbox' ? input.checked : input.value;
+        guardarEstado();
+      });
     });
     tr.querySelector('.btn-eliminar').addEventListener('click', () => {
       estado.provFilas.splice(i, 1);
@@ -122,11 +132,17 @@ document.getElementById('btn-agregar-fila-prov').addEventListener('click', () =>
 });
 
 function filaProveedorDesde(p) {
-  return {
-    cantidad: p.cantidad, base: p.base, altura: p.altura,
-    ladoAEnchapado: p.ladoAEnchapado ?? '', ladoBEnchapado: p.ladoBEnchapado ?? '',
-    observacion: p.observacion || '',
-  };
+  const fila = { cantidad: p.cantidad, base: p.base, altura: p.altura, observacion: p.observacion || '' };
+  // Solo se incluyen las casillas de cubrecanto si el origen las trae (lectura con IA);
+  // si vienen de texto (PDF/OCR/pegado) se dejan sin definir para no comparar cubrecanto.
+  const traeEnchape = p.enchapeA1 !== undefined || p.enchapeA2 !== undefined || p.enchapeB1 !== undefined || p.enchapeB2 !== undefined;
+  if (traeEnchape) {
+    fila.enchapeA1 = !!p.enchapeA1;
+    fila.enchapeA2 = !!p.enchapeA2;
+    fila.enchapeB1 = !!p.enchapeB1;
+    fila.enchapeB2 = !!p.enchapeB2;
+  }
+  return fila;
 }
 
 // Reemplaza "el reporte del proveedor" por completo (usado por "pegar texto": una sola acción manual).

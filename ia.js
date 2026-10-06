@@ -169,8 +169,13 @@ async function leerReporteProveedorConIA(file) {
     base: p.base,
     altura: p.altura,
     // Vertical (izquierda/derecha) = lado A; horizontal (arriba/abajo) = lado B — ver engine.js.
-    ladoAEnchapado: (p.bordeIzquierdo ? 1 : 0) + (p.bordeDerecho ? 1 : 0),
-    ladoBEnchapado: (p.bordeSuperior ? 1 : 0) + (p.bordeInferior ? 1 : 0),
+    // No hay forma de saber cuál orilla es "1" y cuál "2" en el formulario del usuario,
+    // así que se asigna por posición (izquierda/arriba = 1, derecha/abajo = 2) solo para
+    // mostrarlo igual que "mi lista"; la comparación en engine.js solo usa el conteo.
+    enchapeA1: !!p.bordeIzquierdo,
+    enchapeA2: !!p.bordeDerecho,
+    enchapeB1: !!p.bordeSuperior,
+    enchapeB2: !!p.bordeInferior,
     observacion: p.observacion || '',
   }));
   return resultado;
