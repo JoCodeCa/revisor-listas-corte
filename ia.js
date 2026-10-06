@@ -4,6 +4,7 @@
 // puede ubicar qué número va en qué columna y detectar marcas visuales como las
 // líneas de cubrecanto en los diagramas de pieza.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
 import { getAI, GoogleAIBackend, getGenerativeModel, Schema } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js';
 
 const firebaseConfig = {
@@ -15,7 +16,16 @@ const firebaseConfig = {
   messagingSenderId: '840973194482',
 };
 
+// Verificación de aplicaciones (App Check): confirma ante Google que las solicitudes a
+// Gemini vienen de verdad de este sitio, para que nadie más pueda usar la cuota/costo
+// copiando la apiKey (que es pública, visible en el código del navegador).
+const RECAPTCHA_SITE_KEY = '6LdTWuEtAAAAAOQnDoV3HbwopSejU-pPLlJD6I9j';
+
 const firebaseApp = initializeApp(firebaseConfig);
+initializeAppCheck(firebaseApp, {
+  provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),
+  isTokenAutoRefreshEnabled: true,
+});
 const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
 
 const MODELO_ID = 'gemini-3.5-flash-lite'; // cuota gratuita amplia; ver git log para el porqué
