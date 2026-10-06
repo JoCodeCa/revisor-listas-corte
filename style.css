@@ -82,28 +82,30 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  min-width: 480px;
 }
+#tabla-mia, #tabla-proveedor { table-layout: fixed; }
 th, td {
   border: 1px solid var(--borde);
   padding: 0.4rem 0.35rem;
   text-align: center;
 }
+#tabla-mia th, #tabla-mia td, #tabla-proveedor th, #tabla-proveedor td { overflow: hidden; }
 thead th { background: var(--fondo); font-weight: 600; }
 .subencabezado th { font-size: 0.75rem; color: var(--texto-suave); background: var(--fondo); }
 
 td input[type="number"], td input[type="text"] {
   width: 100%;
-  min-width: 55px;
+  min-width: 0;
   border: 1px solid transparent;
   background: transparent;
   text-align: center;
-  padding: 0.3rem;
+  padding: 0.3rem 0.1rem;
   border-radius: 4px;
   font-size: 0.9rem;
 }
 td input:focus { border-color: var(--verde); background: white; outline: none; }
 td input[type="checkbox"] { width: 18px; height: 18px; }
+
 
 .btn-eliminar {
   background: none;
@@ -235,4 +237,17 @@ td input[type="checkbox"] { width: 18px; height: 18px; }
 @media (max-width: 600px) {
   .app-header h1 { font-size: 1.15rem; }
   .panel { padding: 0.75rem; }
+
+  #tabla-mia, #tabla-proveedor { font-size: 0.68rem; }
+  #tabla-mia th, #tabla-mia td, #tabla-proveedor th, #tabla-proveedor td { padding: 0.2rem 0.1rem; }
+  #tabla-mia td input[type="number"], #tabla-mia td input[type="text"],
+  #tabla-proveedor td input[type="number"], #tabla-proveedor td input[type="text"] {
+    padding: 0.15rem 0.05rem;
+    font-size: 0.72rem;
+  }
+  #tabla-mia td input[type="checkbox"], #tabla-proveedor td input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+  }
+  #tabla-mia .btn-eliminar, #tabla-proveedor .btn-eliminar { padding: 0.1rem 0.15rem; font-size: 0.8rem; }
 }
