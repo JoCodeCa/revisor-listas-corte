@@ -89,7 +89,7 @@ th, td {
   padding: 0.4rem 0.35rem;
   text-align: center;
 }
-#tabla-mia th, #tabla-mia td, #tabla-proveedor th, #tabla-proveedor td { overflow: hidden; }
+#tabla-mia th, #tabla-mia td, #tabla-proveedor th, #tabla-proveedor td { overflow: hidden; min-width: 0; }
 thead th { background: var(--fondo); font-weight: 600; }
 .subencabezado th { font-size: 0.75rem; color: var(--texto-suave); background: var(--fondo); }
 
@@ -105,6 +105,18 @@ td input[type="number"], td input[type="text"] {
 }
 td input:focus { border-color: var(--verde); background: white; outline: none; }
 td input[type="checkbox"] { width: 18px; height: 18px; }
+
+/* Quita las flechitas de +/- de los campos numéricos: no sirven en celular
+   (ahí se usa el teclado numérico) y le robaban espacio a columnas angostas. */
+td input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+td input[type="number"]::-webkit-outer-spin-button,
+td input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 
 
 .btn-eliminar {
