@@ -54,8 +54,8 @@
     <div class="acciones-fila">
       <button type="button" id="btn-agregar-fila" class="btn btn-secundario">+ Agregar pieza</button>
       <label class="btn btn-secundario btn-archivo">
-        Cargar foto de mi hoja (lectura con IA)
-        <input type="file" id="input-foto-ocr" accept="image/*" hidden>
+        Cargar foto(s) de mi hoja (lectura con IA)
+        <input type="file" id="input-foto-ocr" accept="image/*" multiple hidden>
       </label>
     </div>
     <div id="ocr-resultado" class="ocr-resultado" hidden>
@@ -69,8 +69,8 @@
 
     <div class="acciones-fila">
       <label class="btn btn-secundario btn-archivo">
-        Subir reporte del proveedor (PDF, foto o captura)
-        <input type="file" id="input-pdf" accept="application/pdf,image/*,.txt,text/plain" hidden>
+        Subir reporte(s) del proveedor (PDF, foto o captura)
+        <input type="file" id="input-pdf" accept="application/pdf,image/*,.txt,text/plain" multiple hidden>
       </label>
       <span id="pdf-estado" class="estado-texto"></span>
     </div>

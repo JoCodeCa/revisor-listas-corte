@@ -121,14 +121,28 @@ document.getElementById('btn-agregar-fila-prov').addEventListener('click', () =>
   renderProveedor();
 });
 
-function aplicarReporteParseado(reporte) {
-  estado.provCliente = reporte.cliente || '';
-  estado.provMaterial = reporte.material || '';
-  estado.provFilas = reporte.piezas.map(p => ({
+function filaProveedorDesde(p) {
+  return {
     cantidad: p.cantidad, base: p.base, altura: p.altura,
     ladoAEnchapado: p.ladoAEnchapado ?? '', ladoBEnchapado: p.ladoBEnchapado ?? '',
     observacion: p.observacion || '',
-  }));
+  };
+}
+
+// Reemplaza "el reporte del proveedor" por completo (usado por "pegar texto": una sola acción manual).
+function aplicarReporteParseado(reporte) {
+  estado.provCliente = reporte.cliente || '';
+  estado.provMaterial = reporte.material || '';
+  estado.provFilas = reporte.piezas.map(filaProveedorDesde);
+  guardarEstado();
+  renderProveedor();
+}
+
+// Agrega piezas al reporte del proveedor sin borrar lo que ya había (usado al subir varios archivos).
+function agregarPiezasProveedor(reporte) {
+  if (reporte.cliente && !estado.provCliente) estado.provCliente = reporte.cliente;
+  if (reporte.material && !estado.provMaterial) estado.provMaterial = reporte.material;
+  estado.provFilas.push(...reporte.piezas.map(filaProveedorDesde));
   guardarEstado();
   renderProveedor();
 }
@@ -161,46 +175,58 @@ async function extraerTextoDeArchivo(file, estadoTexto) {
   return file.text();
 }
 
-async function leerProveedorConTextoPlano(file, estadoTexto) {
+// Intenta leer un archivo del proveedor con IA (PDF/imagen, incluye cubrecanto) y si
+// falla o no aplica, cae de vuelta a extracción de texto (PDF.js/OCR/texto plano).
+async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
+  if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
+    estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} con IA...`;
+    try {
+      const reporte = await window.leerReporteProveedorConIA(file);
+      if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true };
+    } catch (err) {
+      console.error(err);
+      estadoTexto.textContent = `La IA no pudo leer el archivo ${indice}, probando solo con el texto...`;
+    }
+  }
   const texto = await extraerTextoDeArchivo(file, estadoTexto);
   const reporte = Engine.parseReporteProveedor(texto);
-  if (reporte.piezas.length === 0) {
-    estadoTexto.textContent = 'No se encontraron piezas en el archivo. Prueba con "pegar texto" o revisa el archivo.';
-    return;
-  }
-  aplicarReporteParseado(reporte);
-  estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas (sin cubrecanto, se leyó solo el texto). Revísalas antes de comparar.`;
+  return { reporte, conCubrecanto: false };
 }
 
 document.getElementById('input-pdf').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
   const estadoTexto = document.getElementById('pdf-estado');
 
-  // Para PDF/imagen usamos IA primero: puede leer también el cubrecanto del dibujo
-  // del Esquema, cosa que la extracción de texto (PDF/OCR) no puede ver.
-  if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
-    estadoTexto.textContent = 'Leyendo el reporte con IA, esto puede tardar unos segundos...';
+  // Quita las filas vacías antes de ir agregando lo leído de cada archivo.
+  estado.provFilas = estado.provFilas.filter(f => Number(f.cantidad) > 0);
+
+  let totalPiezas = 0;
+  let archivosConCubrecanto = 0;
+  let huboError = false;
+
+  for (let i = 0; i < files.length; i++) {
     try {
-      const reporte = await window.leerReporteProveedorConIA(file);
+      const { reporte, conCubrecanto } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
       if (!reporte.piezas || reporte.piezas.length === 0) {
-        estadoTexto.textContent = 'No se detectaron piezas con IA. Prueba con "pegar texto" o revisa el archivo.';
-        return;
+        huboError = true;
+        continue;
       }
-      aplicarReporteParseado(reporte);
-      estadoTexto.textContent = `Se detectaron ${reporte.piezas.length} piezas, incluyendo cubrecanto. Revísalas antes de comparar.`;
-      return;
+      agregarPiezasProveedor(reporte);
+      totalPiezas += reporte.piezas.length;
+      if (conCubrecanto) archivosConCubrecanto++;
     } catch (err) {
       console.error(err);
-      estadoTexto.textContent = 'La IA no pudo leer el archivo, intentando solo con el texto (sin cubrecanto)...';
+      huboError = true;
     }
   }
 
-  try {
-    await leerProveedorConTextoPlano(file, estadoTexto);
-  } catch (err) {
-    console.error(err);
-    estadoTexto.textContent = 'No se pudo leer el archivo. Prueba con "pegar texto" como respaldo.';
+  if (totalPiezas === 0) {
+    estadoTexto.textContent = 'No se encontraron piezas en el/los archivo(s). Prueba con "pegar texto" o revisa el archivo.';
+  } else {
+    const notaCubrecanto = archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
+    const notaError = huboError ? ' — algún archivo falló, revisa' : '';
+    estadoTexto.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} archivo(s)${notaCubrecanto}${notaError}. Revísalas antes de comparar.`;
   }
 });
 
@@ -241,44 +267,56 @@ async function ocrImagen(file) {
 }
 
 document.getElementById('input-foto-ocr').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
 
   const contenedor = document.getElementById('ocr-resultado');
   const estadoP = document.getElementById('ocr-estado');
   contenedor.hidden = false;
-  estadoP.textContent = 'Analizando la foto con IA, esto puede tardar unos segundos (reintenta sola si el modelo está saturado)...';
 
-  try {
-    if (typeof window.leerHojaConIA !== 'function') {
-      throw new Error('El módulo de lectura con IA todavía no está listo (revisa tu conexión y vuelve a intentar).');
+  if (typeof window.leerHojaConIA !== 'function') {
+    estadoP.textContent = 'El módulo de lectura con IA todavía no está listo (revisa tu conexión y vuelve a intentar).';
+    return;
+  }
+
+  // Quita las filas vacías de la plantilla antes de ir agregando lo que se lea de cada foto.
+  estado.misFilas = estado.misFilas.filter(f => Number(f.cantidad) > 0 || Number(f.ladoA) > 0 || Number(f.ladoB) > 0);
+
+  let totalPiezas = 0;
+  let huboError = false;
+
+  for (let i = 0; i < files.length; i++) {
+    estadoP.textContent = `Analizando foto ${i + 1} de ${files.length} con IA, esto puede tardar unos segundos...`;
+    try {
+      const resultado = await window.leerHojaConIA(files[i]);
+      if (!resultado.piezas || resultado.piezas.length === 0) continue;
+
+      if (resultado.material && !estado.material) estado.material = resultado.material;
+      if (resultado.cubreCanto && !estado.cubrecanto) estado.cubrecanto = resultado.cubreCanto;
+
+      estado.misFilas.push(...resultado.piezas.map(p => ({
+        cantidad: p.cantidad ?? '',
+        ladoA: p.ladoA ?? '',
+        ladoB: p.ladoB ?? '',
+        enchapeA1: !!p.enchapeA1,
+        enchapeA2: !!p.enchapeA2,
+        enchapeB1: !!p.enchapeB1,
+        enchapeB2: !!p.enchapeB2,
+      })));
+      totalPiezas += resultado.piezas.length;
+    } catch (err) {
+      console.error(err);
+      huboError = true;
     }
-    const resultado = await window.leerHojaConIA(file);
+  }
 
-    if (!resultado.piezas || resultado.piezas.length === 0) {
-      estadoP.textContent = 'No se detectaron piezas en la foto. Intenta con mejor luz/enfoque o captura manualmente.';
-      return;
-    }
+  guardarEstado();
+  renderMia();
 
-    if (resultado.material && !estado.material) estado.material = resultado.material;
-    if (resultado.cubreCanto && !estado.cubrecanto) estado.cubrecanto = resultado.cubreCanto;
-
-    estado.misFilas = resultado.piezas.map(p => ({
-      cantidad: p.cantidad ?? '',
-      ladoA: p.ladoA ?? '',
-      ladoB: p.ladoB ?? '',
-      enchapeA1: !!p.enchapeA1,
-      enchapeA2: !!p.enchapeA2,
-      enchapeB1: !!p.enchapeB1,
-      enchapeB2: !!p.enchapeB2,
-    }));
-    guardarEstado();
-    renderMia();
-
-    estadoP.textContent = `Se detectaron ${resultado.piezas.length} piezas. Revisa cada valor en la tabla de arriba antes de comparar — la IA puede equivocarse.`;
-  } catch (err) {
-    console.error(err);
-    estadoP.textContent = 'No se pudo analizar la foto (' + (err.message || 'error desconocido') + '). Captura los datos manualmente en la tabla de arriba.';
+  if (totalPiezas === 0) {
+    estadoP.textContent = 'No se detectó ninguna pieza en las fotos. Intenta con mejor luz/enfoque o captura manualmente.';
+  } else {
+    estadoP.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} foto(s)${huboError ? ' (alguna foto falló, revisa)' : ''}. Revisa cada valor en la tabla de arriba antes de comparar — la IA puede equivocarse.`;
   }
 });
 
