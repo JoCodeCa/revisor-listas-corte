@@ -25,6 +25,7 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 | `app.js` | UI: tablas editables, estado en `localStorage` (`revisor-cortes:v1`), carga de archivos, resultados, configuración. |
 | `ia.js` | Lectura con Gemini vía Firebase AI Logic + App Check (hoja manuscrita y reporte del proveedor con cubrecanto). |
 | `pdfParser.js` | Texto de PDF con pdf.js (respaldo si la IA falla). |
+| `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. |
 | `tema.js` | Tema claro/oscuro/automático (`revisor-cortes:tema`), se carga en `<head>`. |
 | `sw.js`, `compartir.html`, `manifest.json` | "Compartir a esta app" desde WhatsApp (Web Share Target). |
 

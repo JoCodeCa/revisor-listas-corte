@@ -90,7 +90,11 @@ const esquemaPiezaHoja = Schema.object({
     confianzaCantidad: Schema.number(),
     confianzaLadoA: Schema.number(),
     confianzaLadoB: Schema.number(),
+    // Dónde está el renglón en la foto: [ymin, xmin, ymax, xmax] de 0 a 1000. Sirve para
+    // mostrarle al usuario ese pedazo de su hoja cuando revisa un número dudoso.
+    caja: Schema.array({ items: Schema.number() }),
   },
+  optionalProperties: ['caja'],
 });
 
 const esquemaHoja = Schema.object({
@@ -123,7 +127,11 @@ Además, para cantidad, ladoA y ladoB por separado, califica qué tan clara esta
   podría ser una mancha, un número parecido a otro, letra apretada o encimada).
 - 1 = es difícil de leer, estás adivinando o completando con el contexto más que leyendo el trazo.
 No califiques todo como 3 por default: el usuario va a confiar en tu palabra para NO revisar lo que
-marques como 3, así que sé estricto.`;
+marques como 3, así que sé estricto.
+
+Por último, para cada fila devuelve "caja": el recuadro que encierra ese renglón COMPLETO de la tabla en la
+imagen (desde la columna No. hasta las casillas de enchape), como [ymin, xmin, ymax, xmax] con coordenadas
+normalizadas de 0 a 1000 respecto al tamaño de la imagen.`;
 
 async function leerHojaConIA(file) {
   return preguntarConArchivo(modeloHoja, PROMPT_HOJA, file);

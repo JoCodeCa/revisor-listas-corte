@@ -389,6 +389,58 @@ input, textarea, select { color: var(--texto); }
 .nota-config { font-size: 0.78rem; color: var(--texto-suave); margin: 0.6rem 0 0; }
 .dialogo-config .acciones-fila { justify-content: flex-end; margin-top: 1.25rem; }
 
+/* ===================== REVISAR CONTRA LA FOTO ===================== */
+.dialogo-revisar { width: min(560px, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem); padding: 1rem; }
+.revisar-encabezado { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.dialogo-revisar h2 { margin: 0; }
+.revisar-foto {
+  max-height: 55dvh;
+  overflow: auto;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+}
+.revisar-foto canvas { display: block; width: 100%; }
+.revisar-foto-pie { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; }
+.revisar-foto-pie .estado-texto { font-size: 0.78rem; }
+.btn-chico { padding: 0.35rem 0.7rem; font-size: 0.8rem; white-space: nowrap; }
+.revisar-instruccion { margin: 0.8rem 0 0.4rem; }
+
+.revisar-campos { display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap: 0.5rem; }
+.revisar-campos label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--texto-suave); }
+.revisar-campos input {
+  width: 100%;
+  padding: 0.55rem 0.4rem;
+  font-size: 1.1rem;
+  text-align: center;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--blanco);
+}
+.revisar-campos input:focus { outline: 2px solid var(--verde); outline-offset: -1px; }
+.revisar-campos input.confianza-media { background: var(--amarillo-claro); border-color: var(--amarillo); }
+.revisar-campos input.confianza-baja { background: var(--rojo-claro); border-color: var(--rojo); }
+
+.revisar-enchape { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; margin-top: 0.7rem; font-size: 0.85rem; }
+.revisar-enchape span { color: var(--texto-suave); }
+.revisar-enchape label { display: flex; align-items: center; gap: 0.25rem; }
+.revisar-enchape input { width: 18px; height: 18px; }
+.dialogo-revisar .acciones-fila { justify-content: flex-end; margin-top: 1rem; }
+
+/* El "No." de una pieza leída de foto es un botón para verla en la foto. */
+.btn-ver-foto {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.2rem;
+  color: var(--verde);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* Los números marcados se tocan para revisar: cursor de botón. */
+td input.confianza-media, td input.confianza-baja { cursor: pointer; }
+
 .app-footer {
   text-align: center;
   font-size: 0.78rem;

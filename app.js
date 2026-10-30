@@ -66,7 +66,7 @@ function renderMia() {
   estado.misFilas.forEach((fila, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${i + 1}</td>
+      <td>${fila.fotoId ? `<button type="button" class="btn-ver-foto" title="Ver en mi foto">${i + 1}</button>` : i + 1}</td>
       <td><input type="number" min="0" step="1" data-campo="cantidad" value="${escaparHtml(fila.cantidad)}" class="${claseConfianza(fila.confianzaCantidad)}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="ladoA" value="${escaparHtml(fila.ladoA)}" class="${claseConfianza(fila.confianzaLadoA)}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="ladoB" value="${escaparHtml(fila.ladoB)}" class="${claseConfianza(fila.confianzaLadoB)}"></td>
@@ -90,10 +90,18 @@ function renderMia() {
         guardarEstado();
       });
     });
+    // Un número marcado por la IA abre la revisión (foto + valor) en vez de editarse directo.
+    // mousedown.preventDefault evita que el celular saque el teclado antes de abrir la ventana.
+    tr.querySelectorAll('input.confianza-media, input.confianza-baja').forEach(input => {
+      input.addEventListener('mousedown', e => e.preventDefault());
+      input.addEventListener('click', () => abrirRevision(i));
+    });
+    tr.querySelector('.btn-ver-foto')?.addEventListener('click', () => abrirRevision(i));
     tr.querySelector('.btn-eliminar').addEventListener('click', () => {
       estado.misFilas.splice(i, 1);
       guardarEstado();
       renderMia();
+      Fotos.limpiarSinUso(estado.misFilas.map(f => f.fotoId).filter(Boolean));
     });
     tbody.appendChild(tr);
   });
@@ -333,8 +341,13 @@ async function procesarFotosMia(files) {
   for (let i = 0; i < files.length; i++) {
     estadoP.textContent = `Analizando foto ${i + 1} de ${files.length} con IA, esto puede tardar unos segundos...`;
     try {
-      const resultado = await window.leerHojaConIA(files[i]);
+      const foto = await prepararFoto(files[i]);
+      const resultado = await window.leerHojaConIA(foto);
       if (!resultado.piezas || resultado.piezas.length === 0) continue;
+
+      // Se guarda la misma imagen que vio la IA, para que las coordenadas de cada renglón cuadren.
+      const fotoId = `foto-${Date.now()}-${i}`;
+      const fotoGuardada = await Fotos.guardar(fotoId, foto);
 
       if (resultado.material && !estado.material) estado.material = resultado.material;
       if (resultado.cubreCanto && !estado.cubrecanto) estado.cubrecanto = resultado.cubreCanto;
@@ -350,6 +363,8 @@ async function procesarFotosMia(files) {
         confianzaCantidad: p.confianzaCantidad,
         confianzaLadoA: p.confianzaLadoA,
         confianzaLadoB: p.confianzaLadoB,
+        ...(fotoGuardada ? { fotoId } : {}),
+        ...(cajaValida(p.caja) ? { caja: p.caja } : {}),
       })));
       totalPiezas += resultado.piezas.length;
     } catch (err) {
@@ -367,6 +382,189 @@ async function procesarFotosMia(files) {
     estadoP.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} foto(s)${huboError ? ' (alguna foto falló, revisa)' : ''}. Revisa cada valor en la tabla de arriba antes de comparar — la IA puede equivocarse.`;
   }
 }
+
+// Endereza la foto según su orientación EXIF y la limita a 2400 px. Así la IA y la ventana de
+// revisión ven exactamente la misma imagen (si no, las coordenadas de cada renglón no cuadran
+// en fotos de celular giradas) y la foto guardada pesa menos.
+async function prepararFoto(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const escala = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * escala);
+    canvas.height = Math.round(bitmap.height * escala);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) return file;
+    return new File([blob], (file.name || 'hoja').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) {
+    return file; // formato que el navegador no sabe abrir: se manda tal cual
+  }
+}
+
+// La caja de la IA es [ymin, xmin, ymax, xmax] de 0 a 1000; se descarta si no tiene sentido.
+function cajaValida(caja) {
+  return Array.isArray(caja) && caja.length === 4 &&
+    caja.every(n => typeof n === 'number' && n >= 0 && n <= 1000) &&
+    caja[2] > caja[0] && caja[3] > caja[1];
+}
+
+// ===================== REVISAR UN NÚMERO DUDOSO CONTRA LA FOTO =====================
+
+const dialogoRevisar = document.getElementById('dialogo-revisar');
+const CAMPOS_REVISION = ['cantidad', 'ladoA', 'ladoB', 'enchapeA1', 'enchapeA2', 'enchapeB1', 'enchapeB2'];
+let revisionIndice = null;
+let revisionHojaCompleta = false;
+let cacheFoto = { id: null, bitmap: null };
+
+function tieneDudas(fila) {
+  return [1, 2].includes(fila.confianzaCantidad) || [1, 2].includes(fila.confianzaLadoA) || [1, 2].includes(fila.confianzaLadoB);
+}
+
+function indicesPorRevisar() {
+  return estado.misFilas.map((f, i) => (tieneDudas(f) ? i : -1)).filter(i => i !== -1);
+}
+
+async function bitmapDeFoto(fotoId) {
+  if (cacheFoto.id === fotoId) return cacheFoto.bitmap;
+  const blob = await Fotos.obtener(fotoId);
+  if (!blob) return null;
+  try {
+    const bitmap = await createImageBitmap(blob);
+    cacheFoto.bitmap?.close?.();
+    cacheFoto = { id: fotoId, bitmap };
+    return bitmap;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function dibujarFotoRevision() {
+  const fila = estado.misFilas[revisionIndice];
+  const canvas = document.getElementById('revisar-canvas');
+  const nota = document.getElementById('revisar-nota-foto');
+  const btnHoja = document.getElementById('btn-revisar-hoja');
+  const caja = cajaValida(fila.caja) ? fila.caja : null;
+
+  // Qué renglón es dentro de su foto, para ubicarlo a ojo si hace falta.
+  const mismaFoto = estado.misFilas.filter(f => f.fotoId && f.fotoId === fila.fotoId);
+  const renglon = mismaFoto.indexOf(fila) + 1;
+
+  const bitmap = fila.fotoId ? await bitmapDeFoto(fila.fotoId) : null;
+  if (!bitmap) {
+    canvas.hidden = true;
+    btnHoja.hidden = true;
+    nota.textContent = 'La foto original no está guardada en este dispositivo (se leyó antes de esta función o se borró). Compara contra tu hoja de papel.';
+    return;
+  }
+
+  canvas.hidden = false;
+  btnHoja.hidden = !caja;
+  btnHoja.textContent = revisionHojaCompleta ? 'Ver solo el renglón' : 'Ver hoja completa';
+  nota.textContent = caja
+    ? `Renglón ${renglon} de tu foto, marcado con un recuadro.`
+    : `La IA no indicó dónde está este renglón; búscalo en la hoja (renglón ${renglon} de la foto).`;
+
+  const W = bitmap.width;
+  const H = bitmap.height;
+  let sx = 0, sy = 0, ex = W, ey = H;
+  let rect = null;
+  if (caja) {
+    rect = { x0: caja[1] / 1000 * W, y0: caja[0] / 1000 * H, x1: caja[3] / 1000 * W, y1: caja[2] / 1000 * H };
+    if (!revisionHojaCompleta) {
+      // Recorte: el renglón más un renglón y medio arriba y abajo, para tener contexto.
+      const margenY = Math.max((rect.y1 - rect.y0) * 1.5, H * 0.03);
+      const margenX = W * 0.03;
+      sx = Math.max(0, rect.x0 - margenX);
+      ex = Math.min(W, rect.x1 + margenX);
+      sy = Math.max(0, rect.y0 - margenY);
+      ey = Math.min(H, rect.y1 + margenY);
+    }
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const anchoCss = canvas.parentElement.clientWidth;
+  const escala = (anchoCss * dpr) / (ex - sx);
+  canvas.width = Math.round(anchoCss * dpr);
+  canvas.height = Math.round((ey - sy) * escala);
+  canvas.style.height = `${canvas.height / dpr}px`;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, sx, sy, ex - sx, ey - sy, 0, 0, canvas.width, canvas.height);
+
+  if (rect) {
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--amarillo').trim();
+    ctx.strokeStyle = color || 'orange';
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeRect((rect.x0 - sx) * escala, (rect.y0 - sy) * escala, (rect.x1 - rect.x0) * escala, (rect.y1 - rect.y0) * escala);
+  }
+
+  // En la hoja completa, centra el renglón marcado dentro del recuadro con scroll.
+  const contenedor = canvas.parentElement;
+  contenedor.scrollTop = rect && revisionHojaCompleta
+    ? ((rect.y0 + rect.y1) / 2 - sy) * escala / dpr - contenedor.clientHeight / 2
+    : 0;
+}
+
+function abrirRevision(i) {
+  revisionIndice = i;
+  revisionHojaCompleta = false;
+  const fila = estado.misFilas[i];
+
+  document.getElementById('titulo-revisar').textContent = `Pieza ${i + 1}`;
+  CAMPOS_REVISION.forEach(campo => {
+    const input = dialogoRevisar.querySelector(`[data-revisar="${campo}"]`);
+    if (input.type === 'checkbox') {
+      input.checked = !!fila[campo];
+    } else {
+      input.value = fila[campo] ?? '';
+      input.classList.remove('confianza-baja', 'confianza-media');
+      const clase = claseConfianza(fila[CAMPOS_CON_CONFIANZA[campo]]);
+      if (clase) input.classList.add(clase);
+    }
+  });
+
+  const pendientes = indicesPorRevisar();
+  const otros = pendientes.filter(j => j !== i).length;
+  document.getElementById('revisar-pendientes').textContent = otros > 0
+    ? `Quedan ${otros} pieza(s) más por revisar`
+    : (tieneDudas(fila) ? 'Es la última por revisar' : '');
+  document.getElementById('btn-revisar-ok').textContent = otros > 0 ? 'Correcto, siguiente →' : 'Correcto ✓';
+
+  if (!dialogoRevisar.open) dialogoRevisar.showModal();
+  dibujarFotoRevision();
+}
+
+function confirmarRevision() {
+  const fila = estado.misFilas[revisionIndice];
+  CAMPOS_REVISION.forEach(campo => {
+    const input = dialogoRevisar.querySelector(`[data-revisar="${campo}"]`);
+    fila[campo] = input.type === 'checkbox' ? input.checked : input.value;
+  });
+  // El usuario ya lo comparó con su hoja: se quitan las marcas de la IA.
+  Object.values(CAMPOS_CON_CONFIANZA).forEach(c => { delete fila[c]; });
+  guardarEstado();
+  renderMia();
+
+  // Pasa a la siguiente pieza dudosa (hacia abajo, y si no hay, desde arriba).
+  const pendientes = indicesPorRevisar();
+  const siguiente = pendientes.find(j => j > revisionIndice) ?? pendientes[0];
+  if (siguiente !== undefined) {
+    abrirRevision(siguiente);
+  } else {
+    dialogoRevisar.close();
+  }
+}
+
+document.getElementById('btn-revisar-ok').addEventListener('click', confirmarRevision);
+document.getElementById('btn-revisar-cancelar').addEventListener('click', () => dialogoRevisar.close());
+document.getElementById('btn-revisar-hoja').addEventListener('click', () => {
+  revisionHojaCompleta = !revisionHojaCompleta;
+  dibujarFotoRevision();
+});
+dialogoRevisar.addEventListener('click', (e) => {
+  if (e.target === dialogoRevisar) dialogoRevisar.close();
+});
 
 document.getElementById('input-foto-ocr').addEventListener('change', (e) => {
   procesarFotosMia(Array.from(e.target.files));
@@ -481,6 +679,7 @@ document.getElementById('btn-borrar-todo').addEventListener('click', () => {
     proveedorTelefono: estado.proveedorTelefono, // el teléfono del proveedor no cambia por pedido, se conserva
   };
   guardarEstado();
+  Fotos.borrarTodas();
 
   renderMia();
   renderProveedor();
@@ -573,6 +772,7 @@ if ('serviceWorker' in navigator) {
 
 cargarEstado();
 renderMia();
+Fotos.limpiarSinUso(estado.misFilas.map(f => f.fotoId).filter(Boolean));
 renderProveedor();
 document.getElementById('proveedor-telefono').value = estado.proveedorTelefono || '';
 revisarArchivoCompartido();

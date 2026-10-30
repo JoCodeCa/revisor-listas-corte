@@ -38,6 +38,40 @@
   </div>
 </dialog>
 
+<dialog id="dialogo-revisar" class="dialogo-config dialogo-revisar" aria-labelledby="titulo-revisar">
+  <div class="revisar-encabezado">
+    <h2 id="titulo-revisar">Pieza</h2>
+    <span id="revisar-pendientes" class="estado-texto"></span>
+  </div>
+
+  <div class="revisar-foto">
+    <canvas id="revisar-canvas"></canvas>
+  </div>
+  <div class="revisar-foto-pie">
+    <span id="revisar-nota-foto" class="estado-texto"></span>
+    <button type="button" id="btn-revisar-hoja" class="btn btn-secundario btn-chico">Ver hoja completa</button>
+  </div>
+
+  <p class="estado-texto revisar-instruccion">Compara con tu foto. Si algo está mal, corrígelo aquí.</p>
+  <div class="revisar-campos">
+    <label>Cant.<input type="number" min="0" step="1" inputmode="numeric" data-revisar="cantidad"></label>
+    <label>Lado A (cm)<input type="number" min="0" step="0.1" inputmode="decimal" data-revisar="ladoA"></label>
+    <label>Lado B (cm)<input type="number" min="0" step="0.1" inputmode="decimal" data-revisar="ladoB"></label>
+  </div>
+  <div class="revisar-enchape">
+    <span>Enchape:</span>
+    <label><input type="checkbox" data-revisar="enchapeA1"> A1</label>
+    <label><input type="checkbox" data-revisar="enchapeA2"> A2</label>
+    <label><input type="checkbox" data-revisar="enchapeB1"> B1</label>
+    <label><input type="checkbox" data-revisar="enchapeB2"> B2</label>
+  </div>
+
+  <div class="acciones-fila">
+    <button type="button" id="btn-revisar-cancelar" class="btn btn-secundario">Cancelar</button>
+    <button type="button" id="btn-revisar-ok" class="btn btn-primario">Correcto ✓</button>
+  </div>
+</dialog>
+
 <main>
 
   <!-- ===================== MI LISTA ===================== -->
@@ -57,6 +91,7 @@
       Al leer tu hoja con IA, los números se marcan según qué tan segura estuvo:
       <span class="muestra-confianza confianza-media"></span> revisar
       <span class="muestra-confianza confianza-baja"></span> dudoso — sin color, está clara.
+      Toca un número marcado para compararlo con tu foto.
     </p>
 
     <div class="tabla-scroll">
@@ -200,6 +235,7 @@
 </script>
 <script src="engine.js"></script>
 <script src="pdfParser.js"></script>
+<script src="fotos.js"></script>
 <script type="module" src="ia.js"></script>
 <script src="app.js"></script>
 </body>
