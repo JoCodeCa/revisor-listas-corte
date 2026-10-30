@@ -56,6 +56,8 @@
 }
 
 * { box-sizing: border-box; }
+/* "hidden" siempre oculta, aunque la clase del elemento le ponga display (p.ej. .btn). */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -406,6 +408,8 @@ input, textarea, select { color: var(--texto); }
 .revisar-foto canvas[hidden] { display: none; }
 .revisar-foto canvas + canvas { margin-top: 0.4rem; }
 .revisar-nota-foto { font-size: 0.85rem; margin: 0; padding: 0.9rem; text-align: center; }
+.revisar-reintentar { text-align: center; }
+.revisar-reintentar .btn { margin: 0 0 0.8rem; }
 .revisar-nota-foto:empty { display: none; }
 .revisar-instruccion { margin: 0.8rem 0 0.4rem; }
 

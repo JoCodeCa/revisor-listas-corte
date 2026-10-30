@@ -64,12 +64,12 @@ async function generarConReintentos(modelo, partes, intentos = 4) {
   }
 }
 
-async function preguntarConArchivo(modelo, prompt, file) {
+async function preguntarConArchivo(modelo, prompt, file, intentos = 4) {
   const base64 = await archivoABase64(file);
   const resultado = await generarConReintentos(modelo, [
     prompt,
     { inlineData: { mimeType: file.type || 'application/octet-stream', data: base64 } },
-  ]);
+  ], intentos);
   return JSON.parse(resultado.response.text());
 }
 
@@ -171,7 +171,8 @@ Devuelve:
 - cajaEnchape: el recuadro de ESE mismo renglón que abarca solo las 4 casillas de enchape.
 Ambos como [ymin, xmin, ymax, xmax] con coordenadas normalizadas de 0 a 1000 respecto a la imagen completa,
 ajustados a las líneas del renglón (de la línea de arriba a la de abajo de ese renglón, no más).`;
-  return preguntarConArchivo(modeloUbicacion, prompt, file);
+  // Solo 2 intentos: el usuario está esperando con la ventana abierta.
+  return preguntarConArchivo(modeloUbicacion, prompt, file, 2);
 }
 
 // ===================== Reporte del proveedor (PDF o imagen) =====================

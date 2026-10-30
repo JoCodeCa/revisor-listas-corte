@@ -386,10 +386,10 @@ async function procesarFotosMia(files) {
 // Endereza la foto según su orientación EXIF y la limita a 2400 px. Así la IA y la ventana de
 // revisión ven exactamente la misma imagen (si no, las coordenadas de cada renglón no cuadran
 // en fotos de celular giradas) y la foto guardada pesa menos.
-async function prepararFoto(file) {
+async function prepararFoto(file, ladoMax = 2400) {
   try {
     const bitmap = await createImageBitmap(file);
-    const escala = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+    const escala = Math.min(1, ladoMax / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * escala);
     canvas.height = Math.round(bitmap.height * escala);
@@ -443,33 +443,53 @@ async function bitmapDeFoto(fotoId) {
 // abre mientras se estaba buscando por adelantado).
 const ubicacionesEnCurso = new WeakMap();
 
+const LIMITE_UBICAR_MS = 45000;
+
+// Traduce el error de la IA a algo que el usuario entienda (y que sirva para diagnosticar).
+function motivoError(err) {
+  const msg = String(err?.message || err || '');
+  if (/tard[oó] demasiado/.test(msg)) return 'la IA tardó demasiado en responder';
+  if (/429|quota|resource.?exhausted/i.test(msg)) return 'se agotó por ahora la cuota de la IA; intenta en unos minutos';
+  if (/app.?check|recaptcha|403|permission/i.test(msg)) return 'la IA rechazó la solicitud (permiso/App Check)';
+  if (/failed to fetch|network|offline|internet/i.test(msg)) return 'no hay conexión a internet';
+  return msg ? msg.slice(0, 140) : 'error desconocido';
+}
+
 // Pregunta a la IA (una sola vez por pieza) dónde está su renglón en la foto, y lo guarda en
-// la fila. Devuelve null si no hay foto, no hay conexión o la IA no lo encontró.
+// la fila. Resuelve con { ubicacion } o con { error } (el motivo, para mostrarlo).
 function ubicarRenglon(fila) {
-  if (fila.ubicacion) return Promise.resolve(fila.ubicacion);
+  if (fila.ubicacion) return Promise.resolve({ ubicacion: fila.ubicacion });
   if (ubicacionesEnCurso.has(fila)) return ubicacionesEnCurso.get(fila);
 
   const promesa = (async () => {
-    if (!fila.fotoId || typeof window.ubicarRenglonConIA !== 'function') return null;
-    const blob = await Fotos.obtener(fila.fotoId);
-    if (!blob) return null;
-    const mismaFoto = estado.misFilas.filter(f => f.fotoId === fila.fotoId);
     try {
-      const r = await window.ubicarRenglonConIA(blob, {
+      if (typeof window.ubicarRenglonConIA !== 'function') {
+        return { error: 'el módulo de IA no cargó (revisa tu conexión y recarga la app)' };
+      }
+      const blob = fila.fotoId ? await Fotos.obtener(fila.fotoId) : null;
+      if (!blob) return { error: 'la foto ya no está guardada' };
+      // Para ubicar el renglón no hace falta la foto a máxima resolución: más chica sube y se
+      // procesa más rápido. Las coordenadas son relativas (0-1000), así que siguen cuadrando.
+      const foto = await prepararFoto(blob, 1600);
+      const mismaFoto = estado.misFilas.filter(f => f.fotoId === fila.fotoId);
+      const consulta = window.ubicarRenglonConIA(foto, {
         numeroHoja: fila.numeroHoja,
         renglon: mismaFoto.indexOf(fila) + 1,
         cantidad: fila.cantidad,
         ladoA: fila.ladoA,
         ladoB: fila.ladoB,
       });
-      if (!r || !r.encontrado || !cajaValida(r.cajaNumeros)) return null;
+      // Sin límite, una llamada colgada dejaba la ventana en "Buscando…" para siempre.
+      const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('tardó demasiado')), LIMITE_UBICAR_MS));
+      const r = await Promise.race([consulta, limite]);
+      if (!r || !r.encontrado || !cajaValida(r.cajaNumeros)) return { error: 'la IA no encontró el renglón en la foto' };
       fila.ubicacion = { numeros: r.cajaNumeros };
       if (cajaValida(r.cajaEnchape)) fila.ubicacion.enchape = r.cajaEnchape;
       guardarEstado();
-      return fila.ubicacion;
+      return { ubicacion: fila.ubicacion };
     } catch (err) {
       console.error(err);
-      return null;
+      return { error: motivoError(err) };
     } finally {
       ubicacionesEnCurso.delete(fila);
     }
@@ -524,21 +544,38 @@ async function dibujarFotoRevision() {
     return;
   }
 
+  const btnReintentar = document.getElementById('btn-revisar-reintentar');
+  btnReintentar.hidden = true;
+
   if (!fila.ubicacion) {
-    nota.textContent = 'Buscando este renglón en tu foto…';
-    await ubicarRenglon(fila);
+    // Contador de segundos para que se note que sigue trabajando.
+    const inicio = Date.now();
+    const pintar = () => { nota.textContent = `Buscando este renglón en tu foto… ${Math.round((Date.now() - inicio) / 1000)} s`; };
+    pintar();
+    const reloj = setInterval(pintar, 1000);
+    const resultado = await ubicarRenglon(fila);
+    clearInterval(reloj);
     // Si mientras tanto el usuario cerró o pasó a otra pieza, no dibujar encima.
     if (revisionIndice !== indice || !dialogoRevisar.open) return;
-  }
-  if (!fila.ubicacion) {
-    nota.textContent = `No se pudo ubicar este renglón en la foto (revisa tu conexión). Es el renglón ${renglon} de tu hoja.`;
-    return;
+    if (resultado.error) {
+      nota.textContent = `No se pudo ubicar el renglón ${renglon}: ${resultado.error}.`;
+      btnReintentar.hidden = false;
+      return;
+    }
   }
 
   nota.textContent = '';
   const escala = dibujarRecorte(canvasNumeros, bitmap, fila.ubicacion.numeros);
   if (fila.ubicacion.enchape) dibujarRecorte(canvasEnchape, bitmap, fila.ubicacion.enchape, escala);
+
+  // Ya con esta lista, se ubica por adelantado la siguiente pieza dudosa (una a la vez, para
+  // no gastar la cuota con varias consultas simultáneas).
+  const pendientes = indicesPorRevisar();
+  const siguiente = pendientes.find(j => j > indice) ?? pendientes.find(j => j !== indice);
+  if (siguiente !== undefined) ubicarRenglon(estado.misFilas[siguiente]);
 }
+
+document.getElementById('btn-revisar-reintentar').addEventListener('click', () => dibujarFotoRevision());
 
 function abrirRevision(i) {
   revisionIndice = i;
@@ -566,10 +603,6 @@ function abrirRevision(i) {
 
   if (!dialogoRevisar.open) dialogoRevisar.showModal();
   dibujarFotoRevision();
-
-  // Mientras el usuario revisa esta, se va ubicando la siguiente para que no tenga que esperar.
-  const siguiente = pendientes.find(j => j > i) ?? pendientes.find(j => j !== i);
-  if (siguiente !== undefined) ubicarRenglon(estado.misFilas[siguiente]);
 }
 
 function confirmarRevision() {
