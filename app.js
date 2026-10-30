@@ -415,7 +415,6 @@ function cajaValida(caja) {
 const dialogoRevisar = document.getElementById('dialogo-revisar');
 const CAMPOS_REVISION = ['cantidad', 'ladoA', 'ladoB', 'enchapeA1', 'enchapeA2', 'enchapeB1', 'enchapeB2'];
 let revisionIndice = null;
-let revisionHojaCompleta = false;
 let cacheFoto = { id: null, bitmap: null };
 
 function tieneDudas(fila) {
@@ -444,7 +443,6 @@ async function dibujarFotoRevision() {
   const fila = estado.misFilas[revisionIndice];
   const canvas = document.getElementById('revisar-canvas');
   const nota = document.getElementById('revisar-nota-foto');
-  const btnHoja = document.getElementById('btn-revisar-hoja');
   const caja = cajaValida(fila.caja) ? fila.caja : null;
 
   // Qué renglón es dentro de su foto, para ubicarlo a ojo si hace falta.
@@ -454,33 +452,28 @@ async function dibujarFotoRevision() {
   const bitmap = fila.fotoId ? await bitmapDeFoto(fila.fotoId) : null;
   if (!bitmap) {
     canvas.hidden = true;
-    btnHoja.hidden = true;
     nota.textContent = 'La foto original no está guardada en este dispositivo (se leyó antes de esta función o se borró). Compara contra tu hoja de papel.';
     return;
   }
 
   canvas.hidden = false;
-  btnHoja.hidden = !caja;
-  btnHoja.textContent = revisionHojaCompleta ? 'Ver solo el renglón' : 'Ver hoja completa';
   nota.textContent = caja
-    ? `Renglón ${renglon} de tu foto, marcado con un recuadro.`
+    ? ''
     : `La IA no indicó dónde está este renglón; búscalo en la hoja (renglón ${renglon} de la foto).`;
 
   const W = bitmap.width;
   const H = bitmap.height;
   let sx = 0, sy = 0, ex = W, ey = H;
-  let rect = null;
   if (caja) {
-    rect = { x0: caja[1] / 1000 * W, y0: caja[0] / 1000 * H, x1: caja[3] / 1000 * W, y1: caja[2] / 1000 * H };
-    if (!revisionHojaCompleta) {
-      // Recorte: el renglón más un renglón y medio arriba y abajo, para tener contexto.
-      const margenY = Math.max((rect.y1 - rect.y0) * 1.5, H * 0.03);
-      const margenX = W * 0.03;
-      sx = Math.max(0, rect.x0 - margenX);
-      ex = Math.min(W, rect.x1 + margenX);
-      sy = Math.max(0, rect.y0 - margenY);
-      ey = Math.min(H, rect.y1 + margenY);
-    }
+    // Solo el renglón, aislado: un margen chico (35% de su alto) por si la caja de la IA
+    // quedó un poco corrida y no se corten los números.
+    const y0 = caja[0] / 1000 * H, x0 = caja[1] / 1000 * W, y1 = caja[2] / 1000 * H, x1 = caja[3] / 1000 * W;
+    const margenY = (y1 - y0) * 0.35;
+    const margenX = (x1 - x0) * 0.02;
+    sx = Math.max(0, x0 - margenX);
+    ex = Math.min(W, x1 + margenX);
+    sy = Math.max(0, y0 - margenY);
+    ey = Math.min(H, y1 + margenY);
   }
 
   const dpr = window.devicePixelRatio || 1;
@@ -491,24 +484,11 @@ async function dibujarFotoRevision() {
   canvas.style.height = `${canvas.height / dpr}px`;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(bitmap, sx, sy, ex - sx, ey - sy, 0, 0, canvas.width, canvas.height);
-
-  if (rect) {
-    const color = getComputedStyle(document.documentElement).getPropertyValue('--amarillo').trim();
-    ctx.strokeStyle = color || 'orange';
-    ctx.lineWidth = 3 * dpr;
-    ctx.strokeRect((rect.x0 - sx) * escala, (rect.y0 - sy) * escala, (rect.x1 - rect.x0) * escala, (rect.y1 - rect.y0) * escala);
-  }
-
-  // En la hoja completa, centra el renglón marcado dentro del recuadro con scroll.
-  const contenedor = canvas.parentElement;
-  contenedor.scrollTop = rect && revisionHojaCompleta
-    ? ((rect.y0 + rect.y1) / 2 - sy) * escala / dpr - contenedor.clientHeight / 2
-    : 0;
+  canvas.parentElement.scrollTop = 0;
 }
 
 function abrirRevision(i) {
   revisionIndice = i;
-  revisionHojaCompleta = false;
   const fila = estado.misFilas[i];
 
   document.getElementById('titulo-revisar').textContent = `Pieza ${i + 1}`;
@@ -558,10 +538,6 @@ function confirmarRevision() {
 
 document.getElementById('btn-revisar-ok').addEventListener('click', confirmarRevision);
 document.getElementById('btn-revisar-cancelar').addEventListener('click', () => dialogoRevisar.close());
-document.getElementById('btn-revisar-hoja').addEventListener('click', () => {
-  revisionHojaCompleta = !revisionHojaCompleta;
-  dibujarFotoRevision();
-});
 dialogoRevisar.addEventListener('click', (e) => {
   if (e.target === dialogoRevisar) dialogoRevisar.close();
 });

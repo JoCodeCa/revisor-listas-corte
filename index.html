@@ -47,12 +47,9 @@
   <div class="revisar-foto">
     <canvas id="revisar-canvas"></canvas>
   </div>
-  <div class="revisar-foto-pie">
-    <span id="revisar-nota-foto" class="estado-texto"></span>
-    <button type="button" id="btn-revisar-hoja" class="btn btn-secundario btn-chico">Ver hoja completa</button>
-  </div>
+  <p id="revisar-nota-foto" class="estado-texto revisar-nota-foto"></p>
 
-  <p class="estado-texto revisar-instruccion">Compara con tu foto. Si algo está mal, corrígelo aquí.</p>
+  <p class="estado-texto revisar-instruccion">Así está en tu hoja. Si algo está mal, corrígelo aquí.</p>
   <div class="revisar-campos">
     <label>Cant.<input type="number" min="0" step="1" inputmode="numeric" data-revisar="cantidad"></label>
     <label>Lado A (cm)<input type="number" min="0" step="0.1" inputmode="decimal" data-revisar="ladoA"></label>
@@ -68,7 +65,7 @@
 
   <div class="acciones-fila">
     <button type="button" id="btn-revisar-cancelar" class="btn btn-secundario">Cancelar</button>
-    <button type="button" id="btn-revisar-ok" class="btn btn-primario">Correcto ✓</button>
+    <button type="button" id="btn-revisar-ok" class="btn btn-primario" autofocus>Correcto ✓</button>
   </div>
 </dialog>
 

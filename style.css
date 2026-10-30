@@ -191,12 +191,14 @@ td input.confianza-baja:not(:focus) { background: var(--rojo-claro); }
 
 /* Quita las flechitas de +/- de los campos numéricos: no sirven en celular
    (ahí se usa el teclado numérico) y le robaban espacio a columnas angostas. */
-td input[type="number"] {
+td input[type="number"], .revisar-campos input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
 }
 td input[type="number"]::-webkit-outer-spin-button,
-td input[type="number"]::-webkit-inner-spin-button {
+td input[type="number"]::-webkit-inner-spin-button,
+.revisar-campos input[type="number"]::-webkit-outer-spin-button,
+.revisar-campos input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
@@ -401,9 +403,8 @@ input, textarea, select { color: var(--texto); }
   background: var(--fondo);
 }
 .revisar-foto canvas { display: block; width: 100%; }
-.revisar-foto-pie { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; }
-.revisar-foto-pie .estado-texto { font-size: 0.78rem; }
-.btn-chico { padding: 0.35rem 0.7rem; font-size: 0.8rem; white-space: nowrap; }
+.revisar-nota-foto { font-size: 0.78rem; margin: 0.4rem 0 0; }
+.revisar-nota-foto:empty { display: none; }
 .revisar-instruccion { margin: 0.8rem 0 0.4rem; }
 
 .revisar-campos { display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap: 0.5rem; }
