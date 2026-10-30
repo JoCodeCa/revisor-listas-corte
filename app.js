@@ -47,6 +47,16 @@ function claseConfianza(nivel) {
   return '';
 }
 
+// Los valores de las filas pueden venir de la IA, del OCR o de texto pegado; se escapan antes
+// de meterlos al HTML para que una comilla (p.ej. en la Observación) no corte el campo.
+function escaparHtml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function renderMia() {
   document.getElementById('mia-material').value = estado.material;
   document.getElementById('mia-cubrecanto').value = estado.cubrecanto;
@@ -57,9 +67,9 @@ function renderMia() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${i + 1}</td>
-      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}" class="${claseConfianza(fila.confianzaCantidad)}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="ladoA" value="${fila.ladoA}" class="${claseConfianza(fila.confianzaLadoA)}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="ladoB" value="${fila.ladoB}" class="${claseConfianza(fila.confianzaLadoB)}"></td>
+      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${escaparHtml(fila.cantidad)}" class="${claseConfianza(fila.confianzaCantidad)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="ladoA" value="${escaparHtml(fila.ladoA)}" class="${claseConfianza(fila.confianzaLadoA)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="ladoB" value="${escaparHtml(fila.ladoB)}" class="${claseConfianza(fila.confianzaLadoB)}"></td>
       <td><input type="checkbox" data-campo="enchapeA1" ${fila.enchapeA1 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeA2" ${fila.enchapeA2 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeB1" ${fila.enchapeB1 ? 'checked' : ''}></td>
@@ -115,14 +125,14 @@ function renderProveedor() {
   estado.provFilas.forEach((fila, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${fila.cantidad}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="base" value="${fila.base}"></td>
-      <td><input type="number" min="0" step="0.1" data-campo="altura" value="${fila.altura}"></td>
+      <td><input type="number" min="0" step="1" data-campo="cantidad" value="${escaparHtml(fila.cantidad)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="base" value="${escaparHtml(fila.base)}"></td>
+      <td><input type="number" min="0" step="0.1" data-campo="altura" value="${escaparHtml(fila.altura)}"></td>
       <td><input type="checkbox" data-campo="enchapeA1" ${fila.enchapeA1 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeA2" ${fila.enchapeA2 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeB1" ${fila.enchapeB1 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeB2" ${fila.enchapeB2 ? 'checked' : ''}></td>
-      <td><input type="text" data-campo="observacion" value="${fila.observacion || ''}"></td>
+      <td><input type="text" data-campo="observacion" value="${escaparHtml(fila.observacion)}"></td>
       <td><button type="button" class="btn-eliminar" title="Eliminar pieza">✕</button></td>
     `;
     tr.querySelectorAll('[data-campo]').forEach(input => {
@@ -365,7 +375,7 @@ document.getElementById('input-foto-ocr').addEventListener('change', (e) => {
 // ===================== COMPARAR =====================
 
 function estadoALegible(estadoPieza) {
-  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', enchape: 'Cubrecanto incorrecto', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
+  const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', medida: 'Medida incorrecta', enchape: 'Cubrecanto incorrecto', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
   return mapa[estadoPieza] || estadoPieza;
 }
 function estadoAClase(estadoPieza) {

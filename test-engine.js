@@ -41,9 +41,28 @@ console.log('OK: detecta cantidad incorrecta');
 // --- medida incorrecta (falta) ---
 const provMedidaMal = piezasProveedorCorrectas.map((p, i) => i === 1 ? { ...p, base: 580 } : p);
 r = comparar(misPiezas, provMedidaMal);
-const errFalta = r.resultados.find(x => x.estado === 'falta' && x.mia.no === 2);
-assert.ok(errFalta, 'debe marcar como faltante la pieza cuya medida no coincide');
-console.log('OK: detecta medida incorrecta como faltante');
+const errMedida = r.resultados.find(x => x.estado === 'medida' && x.mia.no === 2);
+assert.ok(errMedida, 'debe marcar "medida incorrecta" la pieza que comparte un lado pero no el otro');
+assert.strictEqual(errMedida.proveedor.base_mm, 580);
+assert.ok(!r.resultados.some(x => x.estado === 'falta' || x.estado === 'sobra'), 'no debe partirse en "falta" + "sobra"');
+assert.strictEqual(r.resumen.conError, 1);
+console.log('OK: detecta medida incorrecta como un solo error');
+
+// --- medida y cantidad incorrectas a la vez: sigue siendo un solo error ---
+const provMedidaYCantidadMal = piezasProveedorCorrectas.map((p, i) => i === 0 ? { cantidad: 4, base: 1867, altura: 290 } : p);
+r = comparar(misPiezas, provMedidaYCantidadMal);
+assert.strictEqual(r.resumen.conError, 1, 'medida + cantidad mal en la misma pieza = 1 error');
+const errAmbos = r.resultados.find(x => x.estado === 'medida');
+assert.ok(errAmbos && errAmbos.mia.no === 1 && /cantidad/.test(errAmbos.mensaje));
+assert.ok(/1876x290 mm/.test(generarMensajeProveedor(r.resultados)), 'el mensaje al proveedor debe decir la medida correcta');
+console.log('OK: medida y cantidad incorrectas se reportan juntas');
+
+// --- si no comparten ningún lado, siguen siendo "falta" + "sobra" ---
+const provTotalmenteDistinta = piezasProveedorCorrectas.map((p, i) => i === 1 ? { cantidad: 5, base: 600, altura: 150 } : p);
+r = comparar(misPiezas, provTotalmenteDistinta);
+assert.ok(r.resultados.some(x => x.estado === 'falta' && x.mia.no === 2));
+assert.ok(r.resultados.some(x => x.estado === 'sobra' && x.proveedor.base_mm === 600));
+console.log('OK: piezas sin ningún lado en común siguen como falta + sobra');
 
 // --- orientación invertida ---
 const provInvertida = piezasProveedorCorrectas.map((p, i) => i === 2 ? { cantidad: p.cantidad, base: p.altura, altura: p.base } : p);

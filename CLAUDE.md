@@ -34,7 +34,8 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 - Lado A ↔ Base, Lado B ↔ Altura. Lados cruzados = error de veta (`invertida`), no advertencia.
 - Cubrecanto: se compara el **conteo** de orillas por lado (A y B), no cuál orilla. Solo si el
   reporte se leyó con IA (si vino de texto, los campos de enchape no existen y no se compara).
-- Estados de resultado: `ok`, `cantidad`, `invertida`, `enchape`, `falta`, `sobra`.
+- Estados de resultado: `ok`, `cantidad`, `medida`, `invertida`, `enchape`, `falta`, `sobra`.
+  `medida` = pieza mía sin pareja + pieza del proveedor sobrante que comparten un lado (se juntan en un solo error).
 
 ## Convenciones
 

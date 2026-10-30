@@ -1,42 +1,41 @@
 # Revisor de Listas de Corte
 
-App web (PWA, sin backend) para comparar la lista de corte que le envías a tu
+App web (PWA, sin backend ni build) para comparar la lista de corte que le envías a tu
 proveedor de tableros contra el reporte que ellos te regresan, y detectar
 automáticamente errores de captura.
 
 ## Cómo funciona
 
 1. **Mi lista**: captura tus piezas (cantidad, Lado A, Lado B en **centímetros**,
-   igual que en tu hoja de papel) y qué lados llevan tapacanto.
+   igual que en tu hoja de papel) y qué orillas llevan tapacanto (A1, A2, B1, B2).
+   También puedes subir foto(s) de tu hoja escrita a mano: la IA (Gemini) llena la
+   tabla y marca en amarillo/rojo los números de los que no estuvo segura.
 2. **Reporte del proveedor**: sube lo que te regresen — PDF, foto o captura de
-   pantalla, o un archivo de texto — (o pega el texto si no tienes archivo) y
-   la app extrae automáticamente sus piezas (en **milímetros**). Los PDF con
-   texto seleccionable se leen directo (más confiable); las imágenes se leen
-   con OCR (Tesseract.js), útil para texto impreso pero revisa siempre la
-   tabla resultante antes de comparar.
+   pantalla (varias a la vez) — o pega el texto. La IA lee las piezas (en
+   **milímetros**) y también el cubrecanto del dibujo del Esquema. Si la IA falla,
+   se lee solo el texto (PDF.js / OCR con Tesseract.js), sin cubrecanto.
 3. **Comparar**: la app convierte tus medidas a milímetros y empareja cada
    pieza, señalando:
    - **Cantidad incorrecta**
-   - **Dimensión incorrecta / falta en el reporte del proveedor**
-   - **Orientación invertida** (lados A/B cruzados — útil si el material tiene veta)
-   - **Pieza no solicitada** (algo que el proveedor capturó de más)
-4. **Correcciones**: genera un texto listo para copiar, descargar o enviar por
-   WhatsApp con solo los errores encontrados.
+   - **Medida incorrecta** (comparte un lado, el otro está mal capturado)
+   - **Veta mal orientada** (lados A/B cruzados)
+   - **Cubrecanto incorrecto** (solo si el reporte se leyó con IA)
+   - **Falta en el reporte** / **Pieza no solicitada**
+4. **Correcciones**: genera un mensaje dirigido al proveedor, listo para copiar,
+   descargar o enviar por WhatsApp (puedes guardar su teléfono).
 
-Todo corre en el navegador. Tus datos se guardan únicamente en este
-dispositivo (`localStorage`); nada se sube a ningún servidor.
+Además: modo claro/oscuro/automático (botón de Configuración), "Borrar todo" y
+"Compartir a esta app" desde WhatsApp u otras apps (Web Share Target).
 
-## Captura por foto (OCR)
+## Privacidad
 
-Hay un botón para subir una foto de tu hoja llenada a mano. Usa Tesseract.js
-para intentar leer el texto, pero el reconocimiento de letra manuscrita **no es
-confiable** — se muestra solo como referencia para que transcribas tú los
-valores a la tabla. No llena la tabla automáticamente.
+Tus listas se guardan solo en el navegador de este dispositivo (`localStorage`).
+Las fotos y PDF que se leen con IA se envían a Gemini (Google, vía Firebase AI
+Logic, protegido con App Check) únicamente para leerlos.
 
 ## Desarrollo local
 
-Es un sitio estático, no requiere build. Basta con abrir `index.html` o
-servirlo con cualquier servidor estático, por ejemplo:
+Es un sitio estático, no requiere build:
 
 ```
 npx http-server -p 8081
@@ -50,6 +49,5 @@ node test-engine.js
 
 ## Despliegue
 
-Pensado para Firebase Hosting (mismo patrón que los demás proyectos:
-`firebase.json` + GitHub Actions). Pendiente de crear el proyecto de Firebase
-y el repositorio remoto.
+Cada push a `main` corre las pruebas y publica en Firebase Hosting
+(proyecto `revisor-cortes-taller`) con GitHub Actions (`.github/workflows/deploy.yml`).

@@ -141,6 +141,43 @@ function comparar(misFilas, filasProveedor, tolerancia = TOLERANCIA_MM) {
     return { mia, proveedor: candidata, estado: 'ok', mensaje: 'Coincide' };
   });
 
+  // 4) Medida incorrecta: una pieza mía que quedó sin pareja y una del proveedor que sobra,
+  // pero que comparten al menos un lado, casi siempre son la misma pieza con el otro lado mal
+  // capturado (p.ej. 571 tecleado como 581). Se juntan en un solo error en vez de reportar
+  // "falta" + "sobra" por separado, que confunde. Se hace hasta el final para no robarle a
+  // otra pieza mía su coincidencia exacta.
+  resultados.forEach((r, i) => {
+    if (r.estado !== 'falta') return;
+    const mia = r.mia;
+    let mejor = null;
+    let mejorPuntaje = Infinity;
+    for (const p of provDisponibles) {
+      if (p.usada) continue;
+      // Diferencia en el lado que NO coincide, para cada orientación que comparte un lado.
+      const opciones = [];
+      if (numerosIguales(p.base_mm, mia.ladoA_mm, tolerancia)) opciones.push(Math.abs(p.altura_mm - mia.ladoB_mm));
+      if (numerosIguales(p.altura_mm, mia.ladoB_mm, tolerancia)) opciones.push(Math.abs(p.base_mm - mia.ladoA_mm));
+      if (numerosIguales(p.base_mm, mia.ladoB_mm, tolerancia)) opciones.push(Math.abs(p.altura_mm - mia.ladoA_mm));
+      if (numerosIguales(p.altura_mm, mia.ladoA_mm, tolerancia)) opciones.push(Math.abs(p.base_mm - mia.ladoB_mm));
+      if (opciones.length === 0) continue;
+      // Preferimos la que tiene la misma cantidad; luego la de diferencia más chica.
+      const puntaje = (p.cantidad === mia.cantidad ? 0 : 1e6) + Math.min(...opciones);
+      if (puntaje < mejorPuntaje) { mejor = p; mejorPuntaje = puntaje; }
+    }
+    if (!mejor) return;
+
+    mejor.usada = true;
+    const notaCantidad = mejor.cantidad !== mia.cantidad
+      ? ` (y la cantidad: pediste ${mia.cantidad}, capturó ${mejor.cantidad})`
+      : '';
+    resultados[i] = {
+      mia,
+      proveedor: mejor,
+      estado: 'medida',
+      mensaje: `Medida incorrecta: pediste ${mia.ladoA_mm} x ${mia.ladoB_mm} mm, el proveedor capturó ${mejor.base_mm} x ${mejor.altura_mm} mm${notaCantidad}`,
+    };
+  });
+
   const sobrantes = provDisponibles
     .filter(p => !p.usada)
     .map(p => ({
@@ -259,6 +296,12 @@ function lineaParaProveedor(r) {
   switch (r.estado) {
     case 'cantidad':
       return `Pieza ${dimMia}: pedí ${r.mia.cantidad} pza, capturaste ${r.proveedor.cantidad}`;
+    case 'medida': {
+      const cantidad = r.proveedor.cantidad !== r.mia.cantidad
+        ? `, y la cantidad es ${r.mia.cantidad} pza (capturaste ${r.proveedor.cantidad})`
+        : '';
+      return `Pieza ${dimMia} (x${r.mia.cantidad}): capturaste ${dimProv}, la medida correcta es ${r.mia.ladoA_mm}x${r.mia.ladoB_mm} mm${cantidad}`;
+    }
     case 'falta':
       return `Pieza ${dimMia} (x${r.mia.cantidad}): no aparece en tu confirmación`;
     case 'invertida':
