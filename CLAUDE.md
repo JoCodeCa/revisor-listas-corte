@@ -6,7 +6,7 @@
 - **Subir los cambios directo a `main`** al terminar cada tarea (commit + push), sin PR,
   para probarlos rápido en línea. Si la sesión trabaja en otra rama, también empujar a `main`
   (`git push origin HEAD:main`, solo si es fast-forward; si no, traer `main` primero).
-- Antes de cada push: `node test-engine.js` debe pasar. Si el cambio es visual, revisarlo en
+- Antes de cada push: `node test-engine.js` y `node test-renglones.js` deben pasar. Si el cambio es visual, revisarlo en
   el navegador (Playwright) en modo claro y oscuro y a ancho de celular.
 - Después de cada push a `main`, **confirmar que la publicación de GitHub Actions terminó en
   verde** (no basta con que las pruebas pasen localmente). Si falla, leer el log y arreglarlo
@@ -30,7 +30,8 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 | `app.js` | UI: tablas editables, estado en `localStorage` (`revisor-cortes:v1`), carga de archivos, resultados, configuración. |
 | `ia.js` | Lectura con Gemini vía Firebase AI Logic + App Check (hoja manuscrita y reporte del proveedor con cubrecanto). |
 | `pdfParser.js` | Texto de PDF con pdf.js (respaldo si la IA falla). |
-| `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. El renglón se ubica en la foto bajo demanda (`ubicarRenglonConIA`, modelo completo) y se guarda en `fila.ubicacion`; pedir las cajas de todos los renglones en la lectura inicial con el modelo lite daba renglones corridos. |
+| `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. |
+| `renglones.js` | Ubica los renglones en la foto SIN IA: endereza la foto y detecta las líneas impresas de la tabla. Luego la IA solo lee qué hay en cada renglón etiquetado (F1, F2…, `leerRenglonesEtiquetadosConIA`) y se empareja con las piezas (No. de hoja + valores). Una consulta por foto. La IA dando coordenadas directamente (`ubicarRenglonConIA`) salía corrida varios renglones; solo queda como respaldo si no se detectan líneas. Pruebas: `node test-renglones.js`. |
 | `tema.js` | Tema claro/oscuro/automático (`revisor-cortes:tema`), se carga en `<head>`. |
 | `sw.js`, `compartir.html`, `manifest.json` | "Compartir a esta app" desde WhatsApp (Web Share Target). |
 

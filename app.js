@@ -376,6 +376,10 @@ async function procesarFotosMia(files) {
   guardarEstado();
   renderMia();
 
+  // Se van ubicando los renglones de cada foto que tenga piezas dudosas, para que al tocarlas
+  // la revisión abra sin esperar.
+  new Set(estado.misFilas.filter(f => f.fotoId && tieneDudas(f)).map(f => f.fotoId)).forEach(analizarFoto);
+
   if (totalPiezas === 0) {
     estadoP.textContent = 'No se detectó ninguna pieza en las fotos. Intenta con mejor luz/enfoque o captura manualmente.';
   } else {
@@ -431,7 +435,6 @@ async function bitmapDeFoto(fotoId) {
   if (!blob) return null;
   try {
     const bitmap = await createImageBitmap(blob);
-    cacheFoto.bitmap?.close?.();
     cacheFoto = { id: fotoId, bitmap };
     return bitmap;
   } catch (e) {
@@ -455,41 +458,93 @@ function motivoError(err) {
   return msg ? msg.slice(0, 140) : 'error desconocido';
 }
 
-// Pregunta a la IA (una sola vez por pieza) dónde está su renglón en la foto, y lo guarda en
-// la fila. Resuelve con { ubicacion } o con { error } (el motivo, para mostrarlo).
+// Sin límite, una llamada colgada dejaba la ventana en "Buscando…" para siempre.
+function conLimite(promesa) {
+  const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('tardó demasiado')), LIMITE_UBICAR_MS));
+  return Promise.race([promesa, limite]);
+}
+
+// Qué tanto se parece una pieza de mi lista a lo que la IA leyó en un renglón numerado.
+// El No. de la hoja pesa más; los valores ayudan si el No. no se leyó (o si el usuario ya los
+// corrigió, alguno no coincidirá, pero el resto sí).
+function parecidoRenglon(fila, lectura) {
+  let puntos = 0;
+  if (fila.numeroHoja != null && lectura.numeroHoja === fila.numeroHoja) puntos += 2;
+  if (lectura.cantidad != null && Number(lectura.cantidad) === Number(fila.cantidad)) puntos += 1;
+  if (lectura.ladoA != null && Math.abs(lectura.ladoA - Number(fila.ladoA)) < 0.15) puntos += 1;
+  if (lectura.ladoB != null && Math.abs(lectura.ladoB - Number(fila.ladoB)) < 0.15) puntos += 1;
+  return puntos;
+}
+
+// Empareja las piezas de una foto con los renglones detectados y guarda en cada pieza el
+// recuadro EXACTO de su renglón (de línea a línea de la tabla).
+function asignarRenglones(fotoId, est, lecturas) {
+  const filas = estado.misFilas.filter(f => f.fotoId === fotoId);
+  const pares = [];
+  filas.forEach((fila, k) => lecturas.forEach((lectura, j) => {
+    const puntos = parecidoRenglon(fila, lectura);
+    // Desempate por orden: con piezas idénticas, la k-ésima pieza va con la k-ésima lectura.
+    if (puntos >= 2) pares.push({ fila, lectura, puntos: puntos - Math.abs(k - j) * 0.01 });
+  }));
+  pares.sort((a, b) => b.puntos - a.puntos);
+  const filasUsadas = new Set(), lecturasUsadas = new Set();
+  for (const { fila, lectura } of pares) {
+    if (filasUsadas.has(fila) || lecturasUsadas.has(lectura)) continue;
+    filasUsadas.add(fila);
+    lecturasUsadas.add(lectura);
+    const [y0, y1] = est.renglones[lectura.etiqueta - 1];
+    fila.ubicacion = {
+      numeros: [y0, est.izquierda, y1, est.corte],
+      enchape: [y0, est.corte, y1, est.derecha],
+      angulo: est.angulo,
+      exacta: true,
+    };
+  }
+  guardarEstado();
+}
+
+// Un análisis por foto (detectar renglones + una lectura de la IA) sirve para todas sus piezas.
+const analisisPorFoto = new Map();
+
+function analizarFoto(fotoId) {
+  if (analisisPorFoto.has(fotoId)) return analisisPorFoto.get(fotoId);
+  const promesa = (async () => {
+    try {
+      if (typeof window.leerRenglonesEtiquetadosConIA !== 'function') {
+        return { error: 'el módulo de IA no cargó (revisa tu conexión y recarga la app)' };
+      }
+      const bitmap = await bitmapDeFoto(fotoId);
+      if (!bitmap) return { error: 'la foto ya no está guardada' };
+      const est = await Renglones.analizar(bitmap);
+      if (est.renglones.length < 3) return { error: 'no se distinguen las líneas de la tabla', sinLineas: true };
+      const etiquetada = await Renglones.etiquetar(bitmap, est.renglones, est.angulo);
+      const r = await conLimite(window.leerRenglonesEtiquetadosConIA(etiquetada, est.renglones.length));
+      const lecturas = (r?.renglones || []).filter(l => Number.isInteger(l.etiqueta) && l.etiqueta >= 1 && l.etiqueta <= est.renglones.length);
+      asignarRenglones(fotoId, est, lecturas);
+      return { ok: true };
+    } catch (err) {
+      console.error(err);
+      return { error: motivoError(err) };
+    }
+  })();
+  analisisPorFoto.set(fotoId, promesa);
+  // Si falló, se olvida para que "Reintentar" vuelva a intentarlo.
+  promesa.then(r => { if (r.error) analisisPorFoto.delete(fotoId); });
+  return promesa;
+}
+
+// Dónde está el renglón de esta pieza en su foto. Resuelve con { ubicacion } o { error }.
 function ubicarRenglon(fila) {
-  if (fila.ubicacion) return Promise.resolve({ ubicacion: fila.ubicacion });
+  if (fila.ubicacion?.exacta) return Promise.resolve({ ubicacion: fila.ubicacion });
   if (ubicacionesEnCurso.has(fila)) return ubicacionesEnCurso.get(fila);
 
   const promesa = (async () => {
     try {
-      if (typeof window.ubicarRenglonConIA !== 'function') {
-        return { error: 'el módulo de IA no cargó (revisa tu conexión y recarga la app)' };
-      }
-      const blob = fila.fotoId ? await Fotos.obtener(fila.fotoId) : null;
-      if (!blob) return { error: 'la foto ya no está guardada' };
-      // Para ubicar el renglón no hace falta la foto a máxima resolución: más chica sube y se
-      // procesa más rápido. Las coordenadas son relativas (0-1000), así que siguen cuadrando.
-      const foto = await prepararFoto(blob, 1600);
-      const mismaFoto = estado.misFilas.filter(f => f.fotoId === fila.fotoId);
-      const consulta = window.ubicarRenglonConIA(foto, {
-        numeroHoja: fila.numeroHoja,
-        renglon: mismaFoto.indexOf(fila) + 1,
-        cantidad: fila.cantidad,
-        ladoA: fila.ladoA,
-        ladoB: fila.ladoB,
-      });
-      // Sin límite, una llamada colgada dejaba la ventana en "Buscando…" para siempre.
-      const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('tardó demasiado')), LIMITE_UBICAR_MS));
-      const r = await Promise.race([consulta, limite]);
-      if (!r || !r.encontrado || !cajaValida(r.cajaNumeros)) return { error: 'la IA no encontró el renglón en la foto' };
-      fila.ubicacion = { numeros: r.cajaNumeros };
-      if (cajaValida(r.cajaEnchape)) fila.ubicacion.enchape = r.cajaEnchape;
-      guardarEstado();
-      return { ubicacion: fila.ubicacion };
-    } catch (err) {
-      console.error(err);
-      return { error: motivoError(err) };
+      if (!fila.fotoId) return { error: 'la foto ya no está guardada' };
+      const r = await analizarFoto(fila.fotoId);
+      if (fila.ubicacion?.exacta) return { ubicacion: fila.ubicacion };
+      if (r.sinLineas) return fila.ubicacion ? { ubicacion: fila.ubicacion } : ubicarRenglonSoloIA(fila);
+      return { error: r.error || 'la IA no reconoció este renglón en la foto' };
     } finally {
       ubicacionesEnCurso.delete(fila);
     }
@@ -498,14 +553,48 @@ function ubicarRenglon(fila) {
   return promesa;
 }
 
+// Respaldo cuando no se distinguen las líneas de la tabla: se le pregunta a la IA directamente
+// por las coordenadas de ese renglón (menos preciso: a veces queda corrido).
+async function ubicarRenglonSoloIA(fila) {
+  try {
+    if (typeof window.ubicarRenglonConIA !== 'function') {
+      return { error: 'el módulo de IA no cargó (revisa tu conexión y recarga la app)' };
+    }
+    const blob = fila.fotoId ? await Fotos.obtener(fila.fotoId) : null;
+    if (!blob) return { error: 'la foto ya no está guardada' };
+    // Para ubicar el renglón no hace falta la foto a máxima resolución: más chica sube y se
+    // procesa más rápido. Las coordenadas son relativas (0-1000), así que siguen cuadrando.
+    const foto = await prepararFoto(blob, 1600);
+    const mismaFoto = estado.misFilas.filter(f => f.fotoId === fila.fotoId);
+    const consulta = window.ubicarRenglonConIA(foto, {
+      numeroHoja: fila.numeroHoja,
+      renglon: mismaFoto.indexOf(fila) + 1,
+      cantidad: fila.cantidad,
+      ladoA: fila.ladoA,
+      ladoB: fila.ladoB,
+    });
+    const r = await conLimite(consulta);
+    if (!r || !r.encontrado || !cajaValida(r.cajaNumeros)) return { error: 'la IA no encontró el renglón en la foto' };
+    fila.ubicacion = { numeros: r.cajaNumeros };
+    if (cajaValida(r.cajaEnchape)) fila.ubicacion.enchape = r.cajaEnchape;
+    guardarEstado();
+    return { ubicacion: fila.ubicacion };
+  } catch (err) {
+    console.error(err);
+    return { error: motivoError(err) };
+  }
+}
+
 // Dibuja un pedazo de la foto en el canvas. Devuelve la escala usada (px de pantalla por px de
 // foto) para poder dibujar otro pedazo al mismo tamaño. Margen chico (25% del alto) por si la
 // caja quedó un poco corrida y no se corten los números.
-function dibujarRecorte(canvas, bitmap, caja, escalaFija) {
+function dibujarRecorte(canvas, bitmap, caja, escalaFija, ubicacion = {}) {
   const W = bitmap.width;
   const H = bitmap.height;
   const y0 = caja[0] / 1000 * H, x0 = caja[1] / 1000 * W, y1 = caja[2] / 1000 * H, x1 = caja[3] / 1000 * W;
-  const margenY = (y1 - y0) * 0.25;
+  // Con el renglón detectado por las líneas de la tabla basta un margen mínimo (se ven las
+  // líneas, no los renglones vecinos); con la caja de la IA se deja más por si quedó corrida.
+  const margenY = (y1 - y0) * (ubicacion.exacta ? 0.1 : 0.25);
   const margenX = (x1 - x0) * 0.015;
   const sx = Math.max(0, x0 - margenX);
   const ex = Math.min(W, x1 + margenX);
@@ -521,7 +610,13 @@ function dibujarRecorte(canvas, bitmap, caja, escalaFija) {
   canvas.height = Math.round(altoCss * dpr);
   canvas.style.width = `${anchoCss}px`;
   canvas.style.height = `${altoCss}px`;
-  canvas.getContext('2d').drawImage(bitmap, sx, sy, ex - sx, ey - sy, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(canvas.width / (ex - sx), canvas.height / (ey - sy));
+  ctx.translate(-sx, -sy);
+  // La foto se endereza igual que cuando se detectaron los renglones.
+  Renglones.dibujarEnderezada(ctx, bitmap, ubicacion.angulo || 0);
   canvas.hidden = false;
   return escala;
 }
@@ -547,26 +642,26 @@ async function dibujarFotoRevision() {
   const btnReintentar = document.getElementById('btn-revisar-reintentar');
   btnReintentar.hidden = true;
 
-  if (!fila.ubicacion) {
+  if (!fila.ubicacion?.exacta) {
     // Contador de segundos para que se note que sigue trabajando.
     const inicio = Date.now();
-    const pintar = () => { nota.textContent = `Buscando este renglón en tu foto… ${Math.round((Date.now() - inicio) / 1000)} s`; };
+    const pintar = () => { nota.textContent = `Ubicando los renglones de tu foto… ${Math.round((Date.now() - inicio) / 1000)} s (solo la primera vez por foto)`; };
     pintar();
     const reloj = setInterval(pintar, 1000);
     const resultado = await ubicarRenglon(fila);
     clearInterval(reloj);
     // Si mientras tanto el usuario cerró o pasó a otra pieza, no dibujar encima.
     if (revisionIndice !== indice || !dialogoRevisar.open) return;
-    if (resultado.error) {
-      nota.textContent = `No se pudo ubicar el renglón ${renglon}: ${resultado.error}.`;
+    if (resultado.error || !fila.ubicacion) {
+      nota.textContent = `No se pudo ubicar el renglón ${renglon}: ${resultado.error || 'error desconocido'}.`;
       btnReintentar.hidden = false;
       return;
     }
   }
 
   nota.textContent = '';
-  const escala = dibujarRecorte(canvasNumeros, bitmap, fila.ubicacion.numeros);
-  if (fila.ubicacion.enchape) dibujarRecorte(canvasEnchape, bitmap, fila.ubicacion.enchape, escala);
+  const escala = dibujarRecorte(canvasNumeros, bitmap, fila.ubicacion.numeros, undefined, fila.ubicacion);
+  if (fila.ubicacion.enchape) dibujarRecorte(canvasEnchape, bitmap, fila.ubicacion.enchape, escala, fila.ubicacion);
 
   // Ya con esta lista, se ubica por adelantado la siguiente pieza dudosa (una a la vez, para
   // no gastar la cuota con varias consultas simultáneas).

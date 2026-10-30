@@ -133,7 +133,46 @@ async function leerHojaConIA(file) {
   return preguntarConArchivo(modeloHoja, PROMPT_HOJA, file);
 }
 
+// ===================== Qué hay en cada renglón numerado (F1, F2…) =====================
+// La app detecta los renglones de la tabla en la foto (renglones.js) y los numera con etiquetas
+// rojas a la izquierda. Aquí la IA solo LEE qué hay en cada etiqueta, que se le da mucho mejor
+// que dar coordenadas. Con eso la app sabe exactamente qué renglón de la foto es cada pieza.
+
+const esquemaEtiquetas = Schema.object({
+  properties: {
+    renglones: Schema.array({
+      items: Schema.object({
+        properties: {
+          etiqueta: Schema.number(),
+          numeroHoja: Schema.number(),
+          cantidad: Schema.number(),
+          ladoA: Schema.number(),
+          ladoB: Schema.number(),
+        },
+        optionalProperties: ['numeroHoja', 'cantidad', 'ladoA', 'ladoB'],
+      }),
+    }),
+  },
+});
+
+const modeloEtiquetas = crearModelo(esquemaEtiquetas);
+
+async function leerRenglonesEtiquetadosConIA(file, total) {
+  const prompt = `Esta es una foto de una hoja de pedido de corte escrita a mano: una tabla con columnas No., Cantidad,
+Lado A, Lado B y casillas de enchape. A la IZQUIERDA de la foto agregamos una columna blanca con etiquetas rojas
+F1, F2, … F${total}: cada etiqueta está a la altura de un renglón de la tabla, entre dos rayitas rojas.
+
+Para CADA etiqueta cuyo renglón de la tabla tenga datos escritos, devuelve:
+- etiqueta: el número de la etiqueta (sin la F),
+- numeroHoja: el número de la columna No. de ese renglón,
+- cantidad, ladoA, ladoB: lo que está escrito en ese renglón (usa punto decimal).
+Omite las etiquetas que caen en el encabezado de la tabla o en renglones vacíos. Fíjate bien en que cada
+etiqueta corresponda al renglón que está exactamente a su misma altura.`;
+  return preguntarConArchivo(modeloEtiquetas, prompt, file, 2);
+}
+
 // ===================== Ubicar UN renglón de la hoja en la foto =====================
+// (Respaldo: solo se usa si no se pudieron detectar las líneas de la tabla en la foto.)
 // Pedirle al modelo lite las coordenadas de ~50 renglones a la vez daba cajas corridas varios
 // renglones. Por eso la ubicación se pide aparte, renglón por renglón y solo cuando el usuario
 // lo abre para revisar, con el modelo completo y una pregunta concreta: "¿dónde está el
@@ -253,6 +292,7 @@ async function leerReporteProveedorConIA(file) {
 }
 
 window.leerHojaConIA = leerHojaConIA;
+window.leerRenglonesEtiquetadosConIA = leerRenglonesEtiquetadosConIA;
 window.ubicarRenglonConIA = ubicarRenglonConIA;
 window.leerReporteProveedorConIA = leerReporteProveedorConIA;
 window.dispatchEvent(new Event('ia-lista'));

@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Probar el motor de comparación
-        run: node test-engine.js
+        run: node test-engine.js && node test-renglones.js
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
