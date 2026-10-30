@@ -4,7 +4,7 @@
 const assert = require('assert');
 const { estimarInclinacion, detectarLineas, estructura } = require('./renglones.js');
 
-function hojaSintetica({ inclinacion = 0.012, renglones = 20 } = {}) {
+function hojaSintetica({ inclinacion = 0.012, renglones = 20, cuadritos = false } = {}) {
   const w = 600, h = 900;
   const gris = new Uint8Array(w * h);
   // Papel con sombra (más oscuro hacia la derecha y abajo) y algo de ruido.
@@ -24,6 +24,15 @@ function hojaSintetica({ inclinacion = 0.012, renglones = 20 } = {}) {
   for (const x0 of lineasX) for (let y = lineasY[0]; y <= lineasY.at(-1) + 10; y++) {
     const x = Math.round(x0 - y * inclinacion);
     pinta(x, y); pinta(x + 1, y);
+  }
+  // Como en la hoja real: cada casilla de enchape trae un cuadrito dibujado adentro. Sus bordes
+  // NO deben confundirse con líneas de la tabla (partían los renglones y el corte de columnas).
+  if (cuadritos) {
+    for (let r = 1; r < lineasY.length - 1; r++) for (let c = 4; c < 8; c++) {
+      const xa = lineasX[c] + 8, xb = lineasX[c + 1] - 8, ya = lineasY[r] + 7, yb = lineasY[r + 1] - 7;
+      for (let x = xa; x <= xb; x++) { pinta(Math.round(x), Math.round(ya + x * inclinacion)); pinta(Math.round(x), Math.round(yb + x * inclinacion)); }
+      for (let y = ya; y <= yb; y++) { pinta(Math.round(xa - y * inclinacion), y); pinta(Math.round(xb - y * inclinacion), y); }
+    }
   }
   // "Letra": trazos cortos dentro de las celdas de números.
   for (let r = 1; r < lineasY.length - 1; r++) {
@@ -55,6 +64,19 @@ console.log('OK: arma los renglones y ubica dónde empiezan las casillas de ench
 const vacia = { gris: new Uint8Array(300 * 300).fill(210), w: 300, h: 300 };
 assert.strictEqual(estructura(detectarLineas(vacia.gris, vacia.w, vacia.h), 300, 300).renglones.length, 0);
 console.log('OK: en una foto sin tabla no inventa renglones');
+
+// Hoja con cuadritos en las casillas de enchape (caso real): mismos renglones y mismo corte.
+{
+  const conCuadritos = hojaSintetica({ inclinacion: 0, cuadritos: true });
+  const e = estructura(detectarLineas(conCuadritos.gris, conCuadritos.w, conCuadritos.h), conCuadritos.w, conCuadritos.h);
+  assert.strictEqual(e.renglones.length, conCuadritos.lineasY.length - 1, `los cuadritos no deben partir renglones (salieron ${e.renglones.length})`);
+  const corte = conCuadritos.lineasX[4] / conCuadritos.w * 1000;
+  assert.ok(Math.abs(e.corte - corte) < 15, `con cuadritos, el corte debe seguir después de Lado B (${e.corte.toFixed(0)} vs ${corte.toFixed(0)})`);
+  assert.ok(Math.abs(e.derecha - conCuadritos.lineasX.at(-1) / conCuadritos.w * 1000) < 15, 'el borde derecho es el de la tabla, no el de un cuadrito');
+  const chueca = hojaSintetica({ inclinacion: 0.02, cuadritos: true });
+  assert.ok(Math.abs(Math.tan(estimarInclinacion(chueca.gris, chueca.w, chueca.h)) - 0.02) < 0.004, 'mide la inclinación aunque haya cuadritos');
+}
+console.log('OK: los cuadritos de las casillas de enchape no parten renglones ni mueven el corte');
 
 // Inclinación: debe medirla bien para poder enderezar la foto antes de detectar.
 for (const inclinacion of [0, 0.02, -0.03, 0.05]) {

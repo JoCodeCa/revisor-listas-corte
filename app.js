@@ -498,10 +498,15 @@ function asignarRenglones(fotoId, est, lecturas) {
       enchape: [y0, est.corte, y1, est.derecha],
       angulo: est.angulo,
       exacta: true,
+      version: VERSION_UBICACION,
     };
   }
   guardarEstado();
 }
+
+// Sube cuando cambia la detección, para que las ubicaciones ya guardadas se vuelvan a calcular
+// (la v1 partía los renglones en hojas con cuadritos en las casillas de enchape).
+const VERSION_UBICACION = 2;
 
 // Un análisis por foto (detectar renglones + una lectura de la IA) sirve para todas sus piezas.
 const analisisPorFoto = new Map();
@@ -535,14 +540,14 @@ function analizarFoto(fotoId) {
 
 // Dónde está el renglón de esta pieza en su foto. Resuelve con { ubicacion } o { error }.
 function ubicarRenglon(fila) {
-  if (fila.ubicacion?.exacta) return Promise.resolve({ ubicacion: fila.ubicacion });
+  if (fila.ubicacion?.version === VERSION_UBICACION) return Promise.resolve({ ubicacion: fila.ubicacion });
   if (ubicacionesEnCurso.has(fila)) return ubicacionesEnCurso.get(fila);
 
   const promesa = (async () => {
     try {
       if (!fila.fotoId) return { error: 'la foto ya no está guardada' };
       const r = await analizarFoto(fila.fotoId);
-      if (fila.ubicacion?.exacta) return { ubicacion: fila.ubicacion };
+      if (fila.ubicacion?.version === VERSION_UBICACION) return { ubicacion: fila.ubicacion };
       if (r.sinLineas) return fila.ubicacion ? { ubicacion: fila.ubicacion } : ubicarRenglonSoloIA(fila);
       return { error: r.error || 'la IA no reconoció este renglón en la foto' };
     } finally {
@@ -642,7 +647,7 @@ async function dibujarFotoRevision() {
   const btnReintentar = document.getElementById('btn-revisar-reintentar');
   btnReintentar.hidden = true;
 
-  if (!fila.ubicacion?.exacta) {
+  if (fila.ubicacion?.version !== VERSION_UBICACION) {
     // Contador de segundos para que se note que sigue trabajando.
     const inicio = Date.now();
     const pintar = () => { nota.textContent = `Ubicando los renglones de tu foto… ${Math.round((Date.now() - inicio) / 1000)} s (solo la primera vez por foto)`; };

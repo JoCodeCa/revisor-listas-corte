@@ -71,17 +71,41 @@ const Renglones = (() => {
     return picos(suavizar(perfil), 0.35, Math.max(3, h * 0.006));
   }
 
-  // Qué tan chueca está la foto: se ubican las líneas horizontales en una franja izquierda y en
-  // una derecha y se mide cuánto bajan. Devuelve el ángulo en radianes (positivo = las líneas
-  // bajan hacia la derecha).
+  // Qué tan chueca está la foto. Se prueban ángulos de -5° a 5°: con el ángulo correcto, los
+  // pixeles de cada línea de la tabla caen todos en el mismo renglón de pixeles y el perfil queda
+  // con picos muy marcados (se mide con la suma de cuadrados). Solo se usa la zona de números
+  // (a la derecha, los cuadritos de enchape meten ruido). Devuelve radianes (positivo = las
+  // líneas bajan hacia la derecha).
   function estimarInclinacion(gris, w, h) {
     const oscuro = pixelesOscuros(gris, w, h);
-    const izq = perfilHorizontal(oscuro, w, h, 0.15, 0.3);
-    const der = perfilHorizontal(oscuro, w, h, 0.7, 0.85);
-    if (izq.length < 3 || izq.length !== der.length) return 0;
-    const pendientes = izq.map((y, i) => (der[i] - y) / (w * 0.55)).sort((a, b) => a - b);
-    const mediana = pendientes[Math.floor(pendientes.length / 2)];
-    return Math.abs(mediana) < 0.15 ? Math.atan(mediana) : 0;
+    const xa = Math.round(w * 0.1), xb = Math.round(w * 0.5);
+    const xs = [], ys = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = xa; x < xb; x++) {
+        if (oscuro[y * w + x]) { xs.push(x - xa); ys.push(y); }
+      }
+    }
+    if (xs.length < 100) return 0;
+    const margen = Math.ceil((xb - xa) * Math.tan(5.5 * Math.PI / 180)) + 1;
+    const nitidez = (grados) => {
+      const t = Math.tan(grados * Math.PI / 180);
+      const perfil = new Float64Array(h + 2 * margen);
+      for (let i = 0; i < xs.length; i++) perfil[Math.round(ys[i] - xs[i] * t) + margen]++;
+      let suma = 0;
+      for (let i = 0; i < perfil.length; i++) suma += perfil[i] * perfil[i];
+      return suma;
+    };
+    let mejor = 0, mejorValor = -1;
+    for (let g = -5; g <= 5.0001; g += 0.25) {
+      const v = nitidez(g);
+      if (v > mejorValor) { mejorValor = v; mejor = g; }
+    }
+    const grueso = mejor;
+    for (let g = grueso - 0.25; g <= grueso + 0.25; g += 0.05) {
+      const v = nitidez(g);
+      if (v > mejorValor) { mejorValor = v; mejor = g; }
+    }
+    return Math.abs(mejor) < 0.05 ? 0 : mejor * Math.PI / 180;
   }
 
   // Devuelve las líneas horizontales y verticales de la tabla, en pixeles de la imagen dada
@@ -89,9 +113,10 @@ const Renglones = (() => {
   function detectarLineas(gris, w, h) {
     const oscuro = pixelesOscuros(gris, w, h);
 
-    // Horizontales: se mide solo en una franja central (40% del ancho) para que, si quedó algo
-    // de inclinación, no se "embarre" cada línea sobre muchos pixeles de alto.
-    const horizontales = perfilHorizontal(oscuro, w, h, 0.3, 0.7);
+    // Horizontales: se miden en la zona de No./Cant./Lado A. Ahí solo están las líneas de la
+    // tabla; más a la derecha, los cuadritos de las casillas de enchape agregaban líneas falsas
+    // que partían cada renglón en pedazos.
+    const horizontales = perfilHorizontal(oscuro, w, h, 0.1, 0.5);
     if (horizontales.length < 3) return { horizontales, verticales: [] };
 
     // Verticales: solo dentro del alto de la tabla.
@@ -102,7 +127,9 @@ const Renglones = (() => {
       for (let y = ya; y < yb; y++) n += oscuro[y * w + x];
       perfilV[x] = n / Math.max(1, yb - ya);
     }
-    const verticales = picos(suavizar(perfilV), 0.35, Math.max(3, w * 0.01));
+    // Solo cuentan las líneas que cruzan TODA la tabla (columnas). Los bordes de los cuadritos
+    // de enchape se interrumpen entre renglón y renglón, así que su perfil queda más bajo.
+    const verticales = picos(suavizar(perfilV), 0.7, Math.max(3, w * 0.01));
     return { horizontales, verticales };
   }
 
@@ -111,23 +138,35 @@ const Renglones = (() => {
   // angostas y casi iguales. Todo normalizado de 0 a 1000, como las cajas de la IA.
   function estructura(lineas, w, h) {
     const { horizontales, verticales } = lineas;
-    const renglones = [];
+    let renglones = [];
     for (let i = 0; i + 1 < horizontales.length; i++) {
       const alto = horizontales[i + 1] - horizontales[i];
       if (alto > h * 0.008) renglones.push([horizontales[i] / h * 1000, horizontales[i + 1] / h * 1000]);
+    }
+    // Si aun así algún renglón quedó partido (pedazos mucho más bajos que lo normal), se juntan
+    // los pedazos consecutivos hasta tener el alto típico de un renglón.
+    if (renglones.length >= 3) {
+      const altos = renglones.map(([a, b]) => b - a).sort((x, y) => x - y);
+      const tipico = altos[Math.floor(altos.length / 2)];
+      const unidos = [];
+      for (const r of renglones) {
+        const ultimo = unidos[unidos.length - 1];
+        if (ultimo && (ultimo[1] - ultimo[0] < tipico * 0.6 || r[1] - r[0] < tipico * 0.6) && r[1] - ultimo[0] < tipico * 1.4) {
+          ultimo[1] = r[1];
+        } else {
+          unidos.push([...r]);
+        }
+      }
+      renglones = unidos;
     }
     let izquierda = 0, derecha = 1000, corte = null;
     if (verticales.length >= 2) {
       izquierda = verticales[0] / w * 1000;
       derecha = verticales[verticales.length - 1] / w * 1000;
     }
-    if (verticales.length >= 6) {
-      const ultimas = verticales.slice(-5);
-      const anchos = ultimas.slice(1).map((x, i) => x - ultimas[i]);
-      const promedio = anchos.reduce((a, b) => a + b, 0) / anchos.length;
-      const parejas = anchos.every(a => Math.abs(a - promedio) < promedio * 0.35);
-      if (parejas) corte = ultimas[0] / w * 1000;
-    }
+    // Columnas: borde izquierdo | No. | Cant. | Lado A | Lado B | casillas… → Lado B termina en
+    // la 5ª línea completa.
+    if (verticales.length >= 6) corte = verticales[4] / w * 1000;
     if (corte === null) corte = izquierda + (derecha - izquierda) * 0.55;
     return { renglones, izquierda, derecha, corte };
   }
