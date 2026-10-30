@@ -229,19 +229,33 @@ async function extraerTextoDeArchivo(file, estadoTexto) {
 // Intenta leer un archivo del proveedor con IA (PDF/imagen, incluye cubrecanto) y si
 // falla o no aplica, cae de vuelta a extracción de texto (PDF.js/OCR/texto plano).
 async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
+  let fallaIA = null;
   if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
-    estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} con IA...`;
+    // Contador de segundos: la lectura con IA de un reporte largo puede tardar.
+    const inicio = Date.now();
+    const pintar = () => { estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} con IA… ${Math.round((Date.now() - inicio) / 1000)} s`; };
+    pintar();
+    const reloj = setInterval(pintar, 1000);
     try {
       const reporte = await window.leerReporteProveedorConIA(file);
       if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true };
+      fallaIA = { error: 'la IA no encontró piezas en el archivo' };
     } catch (err) {
       console.error(err);
-      estadoTexto.textContent = `La IA no pudo leer el archivo ${indice}, probando solo con el texto...`;
+      fallaIA = motivoError(err);
+    } finally {
+      clearInterval(reloj);
     }
+    estadoTexto.textContent = `La IA no pudo leer el archivo ${indice} (${fallaIA.error}); probando solo con el texto...`;
   }
-  const texto = await extraerTextoDeArchivo(file, estadoTexto);
-  const reporte = Engine.parseReporteProveedor(texto);
-  return { reporte, conCubrecanto: false };
+  try {
+    const texto = await extraerTextoDeArchivo(file, estadoTexto);
+    return { reporte: Engine.parseReporteProveedor(texto), conCubrecanto: false, fallaIA };
+  } catch (err) {
+    // Si tampoco se pudo leer el texto, se conserva el motivo de la IA para mostrarlo.
+    console.error(err);
+    return { reporte: { piezas: [] }, conCubrecanto: false, fallaIA };
+  }
 }
 
 async function procesarArchivosProveedor(files) {
@@ -254,10 +268,12 @@ async function procesarArchivosProveedor(files) {
   let totalPiezas = 0;
   let archivosConCubrecanto = 0;
   let huboError = false;
+  let ultimaFallaIA = null;
 
   for (let i = 0; i < files.length; i++) {
     try {
-      const { reporte, conCubrecanto } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
+      const { reporte, conCubrecanto, fallaIA } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
+      if (fallaIA) ultimaFallaIA = fallaIA;
       if (!reporte.piezas || reporte.piezas.length === 0) {
         huboError = true;
         continue;
@@ -271,8 +287,12 @@ async function procesarArchivosProveedor(files) {
     }
   }
 
+  // Si la IA falló, se dice por qué (y el error original), para no quedarse sin saber qué pasó.
+  const notaIA = ultimaFallaIA
+    ? ` La IA no pudo leerlo: ${ultimaFallaIA.error}.${ultimaFallaIA.detalle && ultimaFallaIA.detalle !== ultimaFallaIA.error ? ` (Detalle: ${ultimaFallaIA.detalle})` : ''}`
+    : '';
   if (totalPiezas === 0) {
-    estadoTexto.textContent = 'No se encontraron piezas en el/los archivo(s). Prueba con "pegar texto" o revisa el archivo.';
+    estadoTexto.textContent = `No se encontraron piezas en el/los archivo(s).${notaIA} Puedes reintentar, o probar con "pegar texto".`;
   } else {
     const notaCubrecanto = archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
     const notaError = huboError ? ' — algún archivo falló, revisa' : '';
@@ -282,6 +302,8 @@ async function procesarArchivosProveedor(files) {
 
 document.getElementById('input-pdf').addEventListener('change', (e) => {
   procesarArchivosProveedor(Array.from(e.target.files));
+  // Se limpia para que elegir el MISMO archivo otra vez (para reintentar) vuelva a disparar.
+  e.target.value = '';
 });
 
 document.getElementById('btn-procesar-texto').addEventListener('click', () => {
@@ -452,12 +474,15 @@ const LIMITE_UBICAR_MS = 45000;
 // (recortado) como "detalle" para poder diagnosticar si vuelve a pasar.
 function motivoError(err) {
   const msg = String(err?.message || err || '');
-  const detalle = msg.replace(/\s+/g, ' ').slice(0, 160);
+  // Se quita la URL larga de Firebase para que en el detalle quepa lo importante (código y causa).
+  const detalle = msg.replace(/Error fetching from \S+:\s/i, '').replace(/\s+/g, ' ').slice(0, 160);
   let error = detalle || 'error desconocido';
   if (/tard[oó] demasiado/.test(msg)) error = 'la IA tardó demasiado en responder';
   else if (/429|quota|resource.?exhausted/i.test(msg)) error = 'se agotó por ahora la cuota de la IA; intenta en unos minutos';
   else if (/app.?check|recaptcha|403|permission/i.test(msg)) error = 'la IA rechazó la solicitud (permiso/App Check)';
-  else if (/fetch|network|offline|internet/i.test(msg)) error = 'se cortó la conexión con la IA (ya se reintentó varias veces)';
+  else if (/payload|too large|exceeds/i.test(msg)) error = 'el archivo es demasiado grande para la IA';
+  // No basta con buscar "fetch": todos los errores de Firebase AI dicen "Error fetching from…".
+  else if (/failed to fetch|networkerror|network error|load failed|offline/i.test(msg)) error = 'se cortó la conexión con la IA (ya se reintentó varias veces)';
   return { error, detalle };
 }
 
@@ -767,6 +792,7 @@ dialogoRevisar.addEventListener('click', (e) => {
 
 document.getElementById('input-foto-ocr').addEventListener('change', (e) => {
   procesarFotosMia(Array.from(e.target.files));
+  e.target.value = '';
 });
 
 // ===================== COMPARAR =====================

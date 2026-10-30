@@ -59,7 +59,9 @@ async function generarConReintentos(modelo, partes, intentos = 4) {
     } catch (err) {
       // Errores pasajeros: saturación del modelo, o un corte de red a media petición (en el
       // celular pasa seguido al cambiar de WiFi a datos o con señal débil).
-      const esPasajero = /high demand|50[0-9]|overloaded|unavailable|fetch|network|timed? ?out|aborted/i.test(err.message || '');
+      // Ojo: TODOS los errores de Firebase AI dicen "Error fetching from…", así que no se
+      // puede buscar solo "fetch" (eso reintentaba cualquier error y dejaba al usuario esperando).
+      const esPasajero = /high demand|\b50[0-9]\b|overloaded|unavailable|failed to fetch|networkerror|network error|load failed|timed? ?out|aborted/i.test(err.message || '');
       if (!esPasajero || i === intentos) throw err;
       await esperar(3000 * i);
     }
