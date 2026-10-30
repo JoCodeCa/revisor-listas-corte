@@ -21,3 +21,7 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: revisor-cortes-taller
           channelId: live
+          # Fijada: firebase-tools 15.34+ pide además el permiso serviceusage.services.get,
+          # que la cuenta de servicio no tiene (falla con 403). Si se le agrega el rol
+          # "Consumidor de Service Usage" en Google Cloud, se puede volver a "latest".
+          firebaseToolsVersion: 15.32.1
