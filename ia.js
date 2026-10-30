@@ -90,11 +90,11 @@ const esquemaPiezaHoja = Schema.object({
     confianzaCantidad: Schema.number(),
     confianzaLadoA: Schema.number(),
     confianzaLadoB: Schema.number(),
-    // Dónde está el renglón en la foto: [ymin, xmin, ymax, xmax] de 0 a 1000. Sirve para
-    // mostrarle al usuario ese pedazo de su hoja cuando revisa un número dudoso.
-    caja: Schema.array({ items: Schema.number() }),
+    // El número impreso en la columna "No." de la hoja: sirve después para ubicar el renglón
+    // en la foto cuando el usuario revisa un número dudoso (ver ubicarRenglonConIA).
+    numeroHoja: Schema.number(),
   },
-  optionalProperties: ['caja'],
+  optionalProperties: ['numeroHoja'],
 });
 
 const esquemaHoja = Schema.object({
@@ -109,13 +109,13 @@ const esquemaHoja = Schema.object({
 const modeloHoja = crearModelo(esquemaHoja);
 
 const PROMPT_HOJA = `Esta es una foto de una hoja de pedido de corte de un taller de carpintería, escrita a mano.
-Es una tabla con estas columnas: No. (ignóralo, es solo el número de fila), Cantidad, Lado A (en centímetros),
+Es una tabla con estas columnas: No. (el número de renglón impreso o escrito en la hoja), Cantidad, Lado A (en centímetros),
 Lado B (en centímetros), y 4 casillas de "enchape" o "tapacanto" etiquetadas A1, A2, B1, B2 que pueden estar
 marcadas (con una palomita, una X o rellenas) o vacías. También puede haber campos de encabezado "MATERIAL"
 y "CUBRE CANTO" escritos a mano arriba de la tabla.
 
 Lee SOLO las filas de la tabla que tengan datos (ignora las filas vacías).
-Para cada fila devuelve: cantidad (entero), ladoA y ladoB (números, pueden tener decimales, usa punto
+Para cada fila devuelve: numeroHoja (el número de la columna No. de ese renglón), cantidad (entero), ladoA y ladoB (números, pueden tener decimales, usa punto
 decimal, no coma), y si cada casilla de enchape A1/A2/B1/B2 está marcada (true) o vacía (false).
 Prioriza la precisión numérica: si una cifra es ambigua, usa tu mejor estimación según el contexto
 (por ejemplo, medidas de piezas de un mueble suelen ser razonables, no extremas).
@@ -127,14 +127,51 @@ Además, para cantidad, ladoA y ladoB por separado, califica qué tan clara esta
   podría ser una mancha, un número parecido a otro, letra apretada o encimada).
 - 1 = es difícil de leer, estás adivinando o completando con el contexto más que leyendo el trazo.
 No califiques todo como 3 por default: el usuario va a confiar en tu palabra para NO revisar lo que
-marques como 3, así que sé estricto.
-
-Por último, para cada fila devuelve "caja": el recuadro que encierra ese renglón COMPLETO de la tabla en la
-imagen (desde la columna No. hasta las casillas de enchape), como [ymin, xmin, ymax, xmax] con coordenadas
-normalizadas de 0 a 1000 respecto al tamaño de la imagen.`;
+marques como 3, así que sé estricto.`;
 
 async function leerHojaConIA(file) {
   return preguntarConArchivo(modeloHoja, PROMPT_HOJA, file);
+}
+
+// ===================== Ubicar UN renglón de la hoja en la foto =====================
+// Pedirle al modelo lite las coordenadas de ~50 renglones a la vez daba cajas corridas varios
+// renglones. Por eso la ubicación se pide aparte, renglón por renglón y solo cuando el usuario
+// lo abre para revisar, con el modelo completo y una pregunta concreta: "¿dónde está el
+// renglón No. X que dice tal cosa?". Se pide por separado la parte de los números y la de
+// las casillas, para mostrar los números grandes.
+
+const esquemaUbicacion = Schema.object({
+  properties: {
+    encontrado: Schema.boolean(),
+    cajaNumeros: Schema.array({ items: Schema.number() }),
+    cajaEnchape: Schema.array({ items: Schema.number() }),
+  },
+  optionalProperties: ['cajaNumeros', 'cajaEnchape'],
+});
+
+const modeloUbicacion = getGenerativeModel(ai, {
+  model: 'gemini-3.8-flash',
+  generationConfig: { responseMimeType: 'application/json', responseSchema: esquemaUbicacion },
+});
+
+// pista: { numeroHoja?, renglon, cantidad, ladoA, ladoB }
+async function ubicarRenglonConIA(file, pista) {
+  const numero = pista.numeroHoja ? `cuyo número en la columna "No." es ${pista.numeroHoja}` : `que es el renglón con datos número ${pista.renglon} contando desde arriba`;
+  const prompt = `Esta es una foto de una hoja de pedido de corte escrita a mano: una tabla con columnas
+No., Cantidad, Lado A, Lado B y 4 casillas de enchape (A1, A2, B1, B2).
+
+Localiza en la imagen el renglón ${numero}. Sus datos escritos a mano deberían ser aproximadamente:
+cantidad ${pista.cantidad}, Lado A ${pista.ladoA}, Lado B ${pista.ladoB} (pueden diferir un poco porque se
+leyeron con errores). Usa el número de la columna No. y esos valores juntos para asegurarte de elegir el renglón
+correcto; revisa los renglones vecinos antes de responder, es fácil equivocarse por uno o dos renglones.
+
+Devuelve:
+- encontrado: true si lo ubicaste con seguridad.
+- cajaNumeros: el recuadro de ESE renglón desde la columna No. hasta el final de la columna Lado B.
+- cajaEnchape: el recuadro de ESE mismo renglón que abarca solo las 4 casillas de enchape.
+Ambos como [ymin, xmin, ymax, xmax] con coordenadas normalizadas de 0 a 1000 respecto a la imagen completa,
+ajustados a las líneas del renglón (de la línea de arriba a la de abajo de ese renglón, no más).`;
+  return preguntarConArchivo(modeloUbicacion, prompt, file);
 }
 
 // ===================== Reporte del proveedor (PDF o imagen) =====================
@@ -215,5 +252,6 @@ async function leerReporteProveedorConIA(file) {
 }
 
 window.leerHojaConIA = leerHojaConIA;
+window.ubicarRenglonConIA = ubicarRenglonConIA;
 window.leerReporteProveedorConIA = leerReporteProveedorConIA;
 window.dispatchEvent(new Event('ia-lista'));

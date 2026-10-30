@@ -364,7 +364,7 @@ async function procesarFotosMia(files) {
         confianzaLadoA: p.confianzaLadoA,
         confianzaLadoB: p.confianzaLadoB,
         ...(fotoGuardada ? { fotoId } : {}),
-        ...(cajaValida(p.caja) ? { caja: p.caja } : {}),
+        ...(typeof p.numeroHoja === 'number' ? { numeroHoja: p.numeroHoja } : {}),
       })));
       totalPiezas += resultado.piezas.length;
     } catch (err) {
@@ -439,52 +439,105 @@ async function bitmapDeFoto(fotoId) {
   }
 }
 
-async function dibujarFotoRevision() {
-  const fila = estado.misFilas[revisionIndice];
-  const canvas = document.getElementById('revisar-canvas');
-  const nota = document.getElementById('revisar-nota-foto');
-  const caja = cajaValida(fila.caja) ? fila.caja : null;
+// Promesas de ubicación en curso, para no pedir dos veces el mismo renglón (p.ej. si se
+// abre mientras se estaba buscando por adelantado).
+const ubicacionesEnCurso = new WeakMap();
 
-  // Qué renglón es dentro de su foto, para ubicarlo a ojo si hace falta.
+// Pregunta a la IA (una sola vez por pieza) dónde está su renglón en la foto, y lo guarda en
+// la fila. Devuelve null si no hay foto, no hay conexión o la IA no lo encontró.
+function ubicarRenglon(fila) {
+  if (fila.ubicacion) return Promise.resolve(fila.ubicacion);
+  if (ubicacionesEnCurso.has(fila)) return ubicacionesEnCurso.get(fila);
+
+  const promesa = (async () => {
+    if (!fila.fotoId || typeof window.ubicarRenglonConIA !== 'function') return null;
+    const blob = await Fotos.obtener(fila.fotoId);
+    if (!blob) return null;
+    const mismaFoto = estado.misFilas.filter(f => f.fotoId === fila.fotoId);
+    try {
+      const r = await window.ubicarRenglonConIA(blob, {
+        numeroHoja: fila.numeroHoja,
+        renglon: mismaFoto.indexOf(fila) + 1,
+        cantidad: fila.cantidad,
+        ladoA: fila.ladoA,
+        ladoB: fila.ladoB,
+      });
+      if (!r || !r.encontrado || !cajaValida(r.cajaNumeros)) return null;
+      fila.ubicacion = { numeros: r.cajaNumeros };
+      if (cajaValida(r.cajaEnchape)) fila.ubicacion.enchape = r.cajaEnchape;
+      guardarEstado();
+      return fila.ubicacion;
+    } catch (err) {
+      console.error(err);
+      return null;
+    } finally {
+      ubicacionesEnCurso.delete(fila);
+    }
+  })();
+  ubicacionesEnCurso.set(fila, promesa);
+  return promesa;
+}
+
+// Dibuja un pedazo de la foto en el canvas. Devuelve la escala usada (px de pantalla por px de
+// foto) para poder dibujar otro pedazo al mismo tamaño. Margen chico (25% del alto) por si la
+// caja quedó un poco corrida y no se corten los números.
+function dibujarRecorte(canvas, bitmap, caja, escalaFija) {
+  const W = bitmap.width;
+  const H = bitmap.height;
+  const y0 = caja[0] / 1000 * H, x0 = caja[1] / 1000 * W, y1 = caja[2] / 1000 * H, x1 = caja[3] / 1000 * W;
+  const margenY = (y1 - y0) * 0.25;
+  const margenX = (x1 - x0) * 0.015;
+  const sx = Math.max(0, x0 - margenX);
+  const ex = Math.min(W, x1 + margenX);
+  const sy = Math.max(0, y0 - margenY);
+  const ey = Math.min(H, y1 + margenY);
+
+  const dpr = window.devicePixelRatio || 1;
+  const anchoMax = canvas.parentElement.clientWidth;
+  const escala = Math.min(escalaFija ?? Infinity, anchoMax / (ex - sx));
+  const anchoCss = (ex - sx) * escala;
+  const altoCss = (ey - sy) * escala;
+  canvas.width = Math.round(anchoCss * dpr);
+  canvas.height = Math.round(altoCss * dpr);
+  canvas.style.width = `${anchoCss}px`;
+  canvas.style.height = `${altoCss}px`;
+  canvas.getContext('2d').drawImage(bitmap, sx, sy, ex - sx, ey - sy, 0, 0, canvas.width, canvas.height);
+  canvas.hidden = false;
+  return escala;
+}
+
+async function dibujarFotoRevision() {
+  const indice = revisionIndice;
+  const fila = estado.misFilas[indice];
+  const canvasNumeros = document.getElementById('revisar-canvas');
+  const canvasEnchape = document.getElementById('revisar-canvas-enchape');
+  const nota = document.getElementById('revisar-nota-foto');
+  canvasNumeros.hidden = true;
+  canvasEnchape.hidden = true;
+
   const mismaFoto = estado.misFilas.filter(f => f.fotoId && f.fotoId === fila.fotoId);
-  const renglon = mismaFoto.indexOf(fila) + 1;
+  const renglon = fila.numeroHoja ?? mismaFoto.indexOf(fila) + 1;
 
   const bitmap = fila.fotoId ? await bitmapDeFoto(fila.fotoId) : null;
   if (!bitmap) {
-    canvas.hidden = true;
     nota.textContent = 'La foto original no está guardada en este dispositivo (se leyó antes de esta función o se borró). Compara contra tu hoja de papel.';
     return;
   }
 
-  canvas.hidden = false;
-  nota.textContent = caja
-    ? ''
-    : `La IA no indicó dónde está este renglón; búscalo en la hoja (renglón ${renglon} de la foto).`;
-
-  const W = bitmap.width;
-  const H = bitmap.height;
-  let sx = 0, sy = 0, ex = W, ey = H;
-  if (caja) {
-    // Solo el renglón, aislado: un margen chico (35% de su alto) por si la caja de la IA
-    // quedó un poco corrida y no se corten los números.
-    const y0 = caja[0] / 1000 * H, x0 = caja[1] / 1000 * W, y1 = caja[2] / 1000 * H, x1 = caja[3] / 1000 * W;
-    const margenY = (y1 - y0) * 0.35;
-    const margenX = (x1 - x0) * 0.02;
-    sx = Math.max(0, x0 - margenX);
-    ex = Math.min(W, x1 + margenX);
-    sy = Math.max(0, y0 - margenY);
-    ey = Math.min(H, y1 + margenY);
+  if (!fila.ubicacion) {
+    nota.textContent = 'Buscando este renglón en tu foto…';
+    await ubicarRenglon(fila);
+    // Si mientras tanto el usuario cerró o pasó a otra pieza, no dibujar encima.
+    if (revisionIndice !== indice || !dialogoRevisar.open) return;
+  }
+  if (!fila.ubicacion) {
+    nota.textContent = `No se pudo ubicar este renglón en la foto (revisa tu conexión). Es el renglón ${renglon} de tu hoja.`;
+    return;
   }
 
-  const dpr = window.devicePixelRatio || 1;
-  const anchoCss = canvas.parentElement.clientWidth;
-  const escala = (anchoCss * dpr) / (ex - sx);
-  canvas.width = Math.round(anchoCss * dpr);
-  canvas.height = Math.round((ey - sy) * escala);
-  canvas.style.height = `${canvas.height / dpr}px`;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, sx, sy, ex - sx, ey - sy, 0, 0, canvas.width, canvas.height);
-  canvas.parentElement.scrollTop = 0;
+  nota.textContent = '';
+  const escala = dibujarRecorte(canvasNumeros, bitmap, fila.ubicacion.numeros);
+  if (fila.ubicacion.enchape) dibujarRecorte(canvasEnchape, bitmap, fila.ubicacion.enchape, escala);
 }
 
 function abrirRevision(i) {
@@ -513,6 +566,10 @@ function abrirRevision(i) {
 
   if (!dialogoRevisar.open) dialogoRevisar.showModal();
   dibujarFotoRevision();
+
+  // Mientras el usuario revisa esta, se va ubicando la siguiente para que no tenga que esperar.
+  const siguiente = pendientes.find(j => j > i) ?? pendientes.find(j => j !== i);
+  if (siguiente !== undefined) ubicarRenglon(estado.misFilas[siguiente]);
 }
 
 function confirmarRevision() {

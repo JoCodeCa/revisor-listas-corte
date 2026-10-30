@@ -30,7 +30,7 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 | `app.js` | UI: tablas editables, estado en `localStorage` (`revisor-cortes:v1`), carga de archivos, resultados, configuración. |
 | `ia.js` | Lectura con Gemini vía Firebase AI Logic + App Check (hoja manuscrita y reporte del proveedor con cubrecanto). |
 | `pdfParser.js` | Texto de PDF con pdf.js (respaldo si la IA falla). |
-| `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. |
+| `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. El renglón se ubica en la foto bajo demanda (`ubicarRenglonConIA`, modelo completo) y se guarda en `fila.ubicacion`; pedir las cajas de todos los renglones en la lectura inicial con el modelo lite daba renglones corridos. |
 | `tema.js` | Tema claro/oscuro/automático (`revisor-cortes:tema`), se carga en `<head>`. |
 | `sw.js`, `compartir.html`, `manifest.json` | "Compartir a esta app" desde WhatsApp (Web Share Target). |
 
