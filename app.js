@@ -491,8 +491,7 @@ function asignarRenglones(fotoId, est, lecturas) {
   }));
   pares.sort((a, b) => b.puntos - a.puntos);
   const filasUsadas = new Set(), lecturasUsadas = new Set();
-  for (const { fila, lectura } of pares) {
-    if (filasUsadas.has(fila) || lecturasUsadas.has(lectura)) continue;
+  const asignar = (fila, lectura) => {
     filasUsadas.add(fila);
     lecturasUsadas.add(lectura);
     const [y0, y1] = est.renglones[lectura.etiqueta - 1];
@@ -503,8 +502,24 @@ function asignarRenglones(fotoId, est, lecturas) {
       exacta: true,
       version: VERSION_UBICACION,
     };
+  };
+  for (const { fila, lectura } of pares) {
+    if (!filasUsadas.has(fila) && !lecturasUsadas.has(lectura)) asignar(fila, lectura);
   }
+
+  // Segunda pasada, por orden: las piezas que no se emparejaron (p.ej. sin No. de hoja y con el
+  // número dudoso leído distinto) van con los renglones que quedaron libres, en el mismo orden,
+  // siempre que coincidan en al menos un valor.
+  const filasLibres = filas.filter(f => !filasUsadas.has(f));
+  const lecturasLibres = lecturas.filter(l => !lecturasUsadas.has(l)).sort((a, b) => a.etiqueta - b.etiqueta);
+  let j = 0;
+  for (const fila of filasLibres) {
+    while (j < lecturasLibres.length && parecidoRenglon(fila, lecturasLibres[j]) < 1) j++;
+    if (j < lecturasLibres.length) asignar(fila, lecturasLibres[j++]);
+  }
+
   guardarEstado();
+  return { renglones: est.renglones.length, leidos: lecturas.length, emparejadas: filasUsadas.size, piezas: filas.length };
 }
 
 // Sube cuando cambia la detección, para que las ubicaciones ya guardadas se vuelvan a calcular
@@ -528,8 +543,8 @@ function analizarFoto(fotoId) {
       const etiquetada = await Renglones.etiquetar(bitmap, est.renglones, est.angulo);
       const r = await conLimite(window.leerRenglonesEtiquetadosConIA(etiquetada, est.renglones.length));
       const lecturas = (r?.renglones || []).filter(l => Number.isInteger(l.etiqueta) && l.etiqueta >= 1 && l.etiqueta <= est.renglones.length);
-      asignarRenglones(fotoId, est, lecturas);
-      return { ok: true };
+      const resumen = asignarRenglones(fotoId, est, lecturas);
+      return { ok: true, resumen };
     } catch (err) {
       console.error(err);
       return motivoError(err);
@@ -551,8 +566,22 @@ function ubicarRenglon(fila) {
       if (!fila.fotoId) return { error: 'la foto ya no está guardada' };
       const r = await analizarFoto(fila.fotoId);
       if (fila.ubicacion?.version === VERSION_UBICACION) return { ubicacion: fila.ubicacion };
-      if (r.sinLineas) return fila.ubicacion ? { ubicacion: fila.ubicacion } : ubicarRenglonSoloIA(fila);
-      return { error: r.error || 'la IA no reconoció este renglón en la foto', detalle: r.detalle };
+      // Sin líneas detectadas, o con la foto analizada pero esta pieza sin emparejar: se recurre a
+      // pedirle a la IA la ubicación directa (aproximada) en vez de dejar al usuario sin nada.
+      if (r.sinLineas || r.ok) {
+        if (fila.ubicacion) return { ubicacion: fila.ubicacion };
+        const directa = await ubicarRenglonSoloIA(fila);
+        if (directa.ubicacion) return directa;
+        if (r.ok) {
+          const { renglones, leidos, emparejadas, piezas } = r.resumen;
+          return {
+            error: 'la IA no reconoció este renglón en la foto',
+            detalle: `renglones detectados: ${renglones}, leídos por la IA: ${leidos}, piezas emparejadas: ${emparejadas} de ${piezas}. ${directa.detalle || directa.error || ''}`.trim(),
+          };
+        }
+        return directa;
+      }
+      return { error: r.error || 'error desconocido', detalle: r.detalle };
     } finally {
       ubicacionesEnCurso.delete(fila);
     }
@@ -667,7 +696,8 @@ async function dibujarFotoRevision() {
     }
   }
 
-  nota.textContent = '';
+  // Ubicación aproximada (la IA dio coordenadas directas): puede estar corrida, se avisa.
+  nota.textContent = fila.ubicacion.version === VERSION_UBICACION ? '' : 'Ubicación aproximada: si no es este renglón, compáralo con tu hoja.';
   const escala = dibujarRecorte(canvasNumeros, bitmap, fila.ubicacion.numeros, undefined, fila.ubicacion);
   if (fila.ubicacion.enchape) dibujarRecorte(canvasEnchape, bitmap, fila.ubicacion.enchape, escala, fila.ubicacion);
 
