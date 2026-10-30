@@ -50,15 +50,17 @@ function esperar(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Gemini a veces responde "modelo con mucha demanda" (error 500/503) en picos de tráfico;
-// suele resolverse solo reintentando a los pocos segundos.
+// Gemini a veces responde "modelo con mucha demanda" (error 500/503) en picos de tráfico, y en
+// el celular la red se corta a ratos; ambos suelen resolverse reintentando a los pocos segundos.
 async function generarConReintentos(modelo, partes, intentos = 4) {
   for (let i = 1; i <= intentos; i++) {
     try {
       return await modelo.generateContent(partes);
     } catch (err) {
-      const esSaturado = /high demand|50[0-9]|overloaded|unavailable/i.test(err.message || '');
-      if (!esSaturado || i === intentos) throw err;
+      // Errores pasajeros: saturación del modelo, o un corte de red a media petición (en el
+      // celular pasa seguido al cambiar de WiFi a datos o con señal débil).
+      const esPasajero = /high demand|50[0-9]|overloaded|unavailable|fetch|network|timed? ?out|aborted/i.test(err.message || '');
+      if (!esPasajero || i === intentos) throw err;
       await esperar(3000 * i);
     }
   }
@@ -168,7 +170,7 @@ Para CADA etiqueta cuyo renglón de la tabla tenga datos escritos, devuelve:
 - cantidad, ladoA, ladoB: lo que está escrito en ese renglón (usa punto decimal).
 Omite las etiquetas que caen en el encabezado de la tabla o en renglones vacíos. Fíjate bien en que cada
 etiqueta corresponda al renglón que está exactamente a su misma altura.`;
-  return preguntarConArchivo(modeloEtiquetas, prompt, file, 2);
+  return preguntarConArchivo(modeloEtiquetas, prompt, file, 3);
 }
 
 // ===================== Ubicar UN renglón de la hoja en la foto =====================

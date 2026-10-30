@@ -448,14 +448,17 @@ const ubicacionesEnCurso = new WeakMap();
 
 const LIMITE_UBICAR_MS = 45000;
 
-// Traduce el error de la IA a algo que el usuario entienda (y que sirva para diagnosticar).
+// Traduce el error de la IA a algo que el usuario entienda, y guarda el mensaje original
+// (recortado) como "detalle" para poder diagnosticar si vuelve a pasar.
 function motivoError(err) {
   const msg = String(err?.message || err || '');
-  if (/tard[oó] demasiado/.test(msg)) return 'la IA tardó demasiado en responder';
-  if (/429|quota|resource.?exhausted/i.test(msg)) return 'se agotó por ahora la cuota de la IA; intenta en unos minutos';
-  if (/app.?check|recaptcha|403|permission/i.test(msg)) return 'la IA rechazó la solicitud (permiso/App Check)';
-  if (/failed to fetch|network|offline|internet/i.test(msg)) return 'no hay conexión a internet';
-  return msg ? msg.slice(0, 140) : 'error desconocido';
+  const detalle = msg.replace(/\s+/g, ' ').slice(0, 160);
+  let error = detalle || 'error desconocido';
+  if (/tard[oó] demasiado/.test(msg)) error = 'la IA tardó demasiado en responder';
+  else if (/429|quota|resource.?exhausted/i.test(msg)) error = 'se agotó por ahora la cuota de la IA; intenta en unos minutos';
+  else if (/app.?check|recaptcha|403|permission/i.test(msg)) error = 'la IA rechazó la solicitud (permiso/App Check)';
+  else if (/fetch|network|offline|internet/i.test(msg)) error = 'se cortó la conexión con la IA (ya se reintentó varias veces)';
+  return { error, detalle };
 }
 
 // Sin límite, una llamada colgada dejaba la ventana en "Buscando…" para siempre.
@@ -529,7 +532,7 @@ function analizarFoto(fotoId) {
       return { ok: true };
     } catch (err) {
       console.error(err);
-      return { error: motivoError(err) };
+      return motivoError(err);
     }
   })();
   analisisPorFoto.set(fotoId, promesa);
@@ -549,7 +552,7 @@ function ubicarRenglon(fila) {
       const r = await analizarFoto(fila.fotoId);
       if (fila.ubicacion?.version === VERSION_UBICACION) return { ubicacion: fila.ubicacion };
       if (r.sinLineas) return fila.ubicacion ? { ubicacion: fila.ubicacion } : ubicarRenglonSoloIA(fila);
-      return { error: r.error || 'la IA no reconoció este renglón en la foto' };
+      return { error: r.error || 'la IA no reconoció este renglón en la foto', detalle: r.detalle };
     } finally {
       ubicacionesEnCurso.delete(fila);
     }
@@ -586,7 +589,7 @@ async function ubicarRenglonSoloIA(fila) {
     return { ubicacion: fila.ubicacion };
   } catch (err) {
     console.error(err);
-    return { error: motivoError(err) };
+    return motivoError(err);
   }
 }
 
@@ -635,9 +638,6 @@ async function dibujarFotoRevision() {
   canvasNumeros.hidden = true;
   canvasEnchape.hidden = true;
 
-  const mismaFoto = estado.misFilas.filter(f => f.fotoId && f.fotoId === fila.fotoId);
-  const renglon = fila.numeroHoja ?? mismaFoto.indexOf(fila) + 1;
-
   const bitmap = fila.fotoId ? await bitmapDeFoto(fila.fotoId) : null;
   if (!bitmap) {
     nota.textContent = 'La foto original no está guardada en este dispositivo (se leyó antes de esta función o se borró). Compara contra tu hoja de papel.';
@@ -645,7 +645,9 @@ async function dibujarFotoRevision() {
   }
 
   const btnReintentar = document.getElementById('btn-revisar-reintentar');
+  const detalle = document.getElementById('revisar-detalle-error');
   btnReintentar.hidden = true;
+  detalle.textContent = '';
 
   if (fila.ubicacion?.version !== VERSION_UBICACION) {
     // Contador de segundos para que se note que sigue trabajando.
@@ -658,7 +660,8 @@ async function dibujarFotoRevision() {
     // Si mientras tanto el usuario cerró o pasó a otra pieza, no dibujar encima.
     if (revisionIndice !== indice || !dialogoRevisar.open) return;
     if (resultado.error || !fila.ubicacion) {
-      nota.textContent = `No se pudo ubicar el renglón ${renglon}: ${resultado.error || 'error desconocido'}.`;
+      nota.textContent = `No se pudo ubicar la pieza ${indice + 1} en tu foto: ${resultado.error || 'error desconocido'}.`;
+      detalle.textContent = resultado.detalle && resultado.detalle !== resultado.error ? `Detalle: ${resultado.detalle}` : '';
       btnReintentar.hidden = false;
       return;
     }
