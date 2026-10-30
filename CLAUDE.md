@@ -8,6 +8,11 @@
   (`git push origin HEAD:main`, solo si es fast-forward; si no, traer `main` primero).
 - Antes de cada push: `node test-engine.js` debe pasar. Si el cambio es visual, revisarlo en
   el navegador (Playwright) en modo claro y oscuro y a ancho de celular.
+- Después de cada push a `main`, **confirmar que la publicación de GitHub Actions terminó en
+  verde** (no basta con que las pruebas pasen localmente). Si falla, leer el log y arreglarlo
+  antes de dar la tarea por terminada.
+- `firebase-tools` está fijado a 15.32.1 en el workflow: la 15.34+ pide el permiso
+  `serviceusage.services.get` que la cuenta de servicio no tiene (403).
 - Si algo sale mal, se regresa con `git revert` (nunca reescribir historia ni force-push en `main`).
 - El push a `main` publica solo en Firebase Hosting (`.github/workflows/deploy.yml`, proyecto
   `revisor-cortes-taller`); las pruebas del motor corren antes y bloquean la publicación si fallan.
