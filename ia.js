@@ -72,22 +72,63 @@ function esCuotaAgotada(err) {
   return /\b429\b|quota|resource.?exhausted/i.test(err?.message || '');
 }
 
-// "modelos" puede ser uno solo o una lista en orden de preferencia: si al primero se le agotó
-// la cuota (429; el modelo completo tiene un límite gratuito diario bajo), se usa el siguiente
-// (el lite, con mucha más cuota) en vez de dejar al usuario sin lectura. Si se usó un respaldo,
-// el resultado trae usoRespaldo = true para poder avisarle.
+// Google dice en el error QUÉ límite se agotó (por minuto o por día) y cuánto esperar. Firebase
+// AI lo deja en customErrorData.errorDetails (QuotaFailure / RetryInfo).
+function infoCuota(err) {
+  const detalles = err?.customErrorData?.errorDetails || [];
+  const violacion = detalles.find(d => /QuotaFailure/.test(d?.['@type'] || ''))?.violations?.[0] || {};
+  const espera = detalles.find(d => /RetryInfo/.test(d?.['@type'] || ''))?.retryDelay;
+  const quotaId = violacion.quotaId || '';
+  return {
+    quotaId,
+    limite: violacion.quotaValue || null,
+    esperaSeg: espera ? parseFloat(espera) : null,
+    porDia: /PerDay/i.test(quotaId),
+    porMinuto: /PerMinute/i.test(quotaId),
+  };
+}
+
+// "modelos" puede ser uno solo o una lista en orden de preferencia.
+// Si se agota la cuota:
+// - Límite POR MINUTO (p.ej. varias consultas seguidas): se espera lo que indica Google y se
+//   reintenta con el MISMO modelo (el avanzado sigue disponible, solo hay que esperar).
+// - Límite POR DÍA: se pasa al siguiente modelo de la lista (el lite, con mucha más cuota) en vez
+//   de dejar al usuario sin lectura; el resultado trae usoRespaldo / cuotaRespaldo para avisarle.
+// Al mensaje de error se le agrega qué límite fue, para poder diagnosticar.
 async function preguntarConArchivo(modelos, prompt, file, intentos = 4) {
   const lista = Array.isArray(modelos) ? modelos : [modelos];
   const base64 = await archivoABase64(file);
   const partes = [prompt, { inlineData: { mimeType: file.type || 'application/octet-stream', data: base64 } }];
+  let cuotaAnterior = null;
   for (let i = 0; i < lista.length; i++) {
-    try {
-      const resultado = await generarConReintentos(lista[i], partes, intentos);
-      const datos = JSON.parse(resultado.response.text());
-      if (i > 0) datos.usoRespaldo = true;
-      return datos;
-    } catch (err) {
-      if (!esCuotaAgotada(err) || i === lista.length - 1) throw err;
+    let esperoPorMinuto = false;
+    for (;;) {
+      try {
+        const resultado = await generarConReintentos(lista[i], partes, intentos);
+        const datos = JSON.parse(resultado.response.text());
+        if (i > 0) {
+          datos.usoRespaldo = true;
+          datos.cuotaRespaldo = cuotaAnterior;
+        }
+        return datos;
+      } catch (err) {
+        if (!esCuotaAgotada(err)) throw err;
+        const info = infoCuota(err);
+        if (info.quotaId) {
+          try { err.message += ` [límite: ${info.quotaId}${info.limite ? ` = ${info.limite}` : ''}]`; } catch (e) { /* mensaje de solo lectura */ }
+        }
+        // Si Google no dijo qué límite fue, se asume el por minuto (se espera una vez) antes de
+        // renunciar al modelo avanzado.
+        const esperaCorta = !info.porDia && (info.porMinuto || info.esperaSeg === null || info.esperaSeg <= 60);
+        if (esperaCorta && !esperoPorMinuto) {
+          esperoPorMinuto = true;
+          await esperar(((info.esperaSeg ?? 30) + 2) * 1000);
+          continue;
+        }
+        if (i === lista.length - 1) throw err;
+        cuotaAnterior = info;
+        break;
+      }
     }
   }
 }
@@ -213,10 +254,6 @@ const esquemaUbicacion = Schema.object({
   optionalProperties: ['cajaNumeros', 'cajaEnchape'],
 });
 
-const modeloUbicacion = getGenerativeModel(ai, {
-  model: 'gemini-3.8-flash',
-  generationConfig: { responseMimeType: 'application/json', responseSchema: esquemaUbicacion },
-});
 
 // pista: { numeroHoja?, renglon, cantidad, ladoA, ladoB }
 async function ubicarRenglonConIA(file, pista) {
@@ -236,7 +273,8 @@ Devuelve:
 Ambos como [ymin, xmin, ymax, xmax] con coordenadas normalizadas de 0 a 1000 respecto a la imagen completa,
 ajustados a las líneas del renglón (de la línea de arriba a la de abajo de ese renglón, no más).`;
   // Solo 2 intentos: el usuario está esperando con la ventana abierta.
-  return preguntarConArchivo([modeloUbicacion, crearModelo(esquemaUbicacion)], prompt, file, 2);
+  // Es solo un respaldo aproximado: se usa el lite para no gastar la cuota del modelo avanzado.
+  return preguntarConArchivo(crearModelo(esquemaUbicacion), prompt, file, 2);
 }
 
 // ===================== Reporte del proveedor (PDF o imagen) =====================

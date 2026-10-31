@@ -233,12 +233,18 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
   if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
     // Contador de segundos: la lectura con IA de un reporte largo puede tardar.
     const inicio = Date.now();
-    const pintar = () => { estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} con IA… ${Math.round((Date.now() - inicio) / 1000)} s`; };
+    const pintar = () => {
+      const seg = Math.round((Date.now() - inicio) / 1000);
+      // Pasado un rato se explica: si se topó con el límite por minuto, la app está esperando para
+      // reintentar con el modelo avanzado (no está colgada).
+      const nota = seg > 20 ? ' (si la IA pidió esperar por su límite por minuto, la app reintenta sola)' : '';
+      estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} con IA… ${seg} s${nota}`;
+    };
     pintar();
     const reloj = setInterval(pintar, 1000);
     try {
       const reporte = await window.leerReporteProveedorConIA(file);
-      if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true, conRespaldo: !!reporte.usoRespaldo };
+      if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true, conRespaldo: reporte.usoRespaldo ? (reporte.cuotaRespaldo || {}) : null };
       fallaIA = { error: 'la IA no encontró piezas en el archivo' };
     } catch (err) {
       console.error(err);
@@ -275,7 +281,7 @@ async function procesarArchivosProveedor(files) {
     try {
       const { reporte, conCubrecanto, conRespaldo, fallaIA } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
       if (fallaIA) ultimaFallaIA = fallaIA;
-      if (conRespaldo) usoRespaldo = true;
+      if (conRespaldo) usoRespaldo = conRespaldo;
       if (!reporte.piezas || reporte.piezas.length === 0) {
         huboError = true;
         continue;
@@ -299,7 +305,8 @@ async function procesarArchivosProveedor(files) {
     const notaCubrecanto = archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
     const notaError = huboError ? ' — algún archivo falló, revisa' : '';
     // Se agotó la cuota del modelo completo y se leyó con el rápido: el cubrecanto puede venir mal.
-    const notaRespaldo = usoRespaldo ? ' Ojo: por cuota agotada de la IA se leyó con el modelo rápido, que distingue peor el cubrecanto; revísalo.' : '';
+    const limiteDia = usoRespaldo && usoRespaldo.porDia ? `la cuota DIARIA del modelo avanzado${usoRespaldo.limite ? ` (${usoRespaldo.limite} consultas al día)` : ''}` : 'la cuota del modelo avanzado';
+    const notaRespaldo = usoRespaldo ? ` Ojo: se agotó ${limiteDia} y se leyó con el modelo rápido, que distingue peor el cubrecanto; revísalo.` : '';
     estadoTexto.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} archivo(s)${notaCubrecanto}${notaError}. Revísalas antes de comparar.${notaRespaldo}`;
   }
 }
