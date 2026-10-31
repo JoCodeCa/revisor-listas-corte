@@ -68,13 +68,28 @@ async function generarConReintentos(modelo, partes, intentos = 4) {
   }
 }
 
-async function preguntarConArchivo(modelo, prompt, file, intentos = 4) {
+function esCuotaAgotada(err) {
+  return /\b429\b|quota|resource.?exhausted/i.test(err?.message || '');
+}
+
+// "modelos" puede ser uno solo o una lista en orden de preferencia: si al primero se le agotó
+// la cuota (429; el modelo completo tiene un límite gratuito diario bajo), se usa el siguiente
+// (el lite, con mucha más cuota) en vez de dejar al usuario sin lectura. Si se usó un respaldo,
+// el resultado trae usoRespaldo = true para poder avisarle.
+async function preguntarConArchivo(modelos, prompt, file, intentos = 4) {
+  const lista = Array.isArray(modelos) ? modelos : [modelos];
   const base64 = await archivoABase64(file);
-  const resultado = await generarConReintentos(modelo, [
-    prompt,
-    { inlineData: { mimeType: file.type || 'application/octet-stream', data: base64 } },
-  ], intentos);
-  return JSON.parse(resultado.response.text());
+  const partes = [prompt, { inlineData: { mimeType: file.type || 'application/octet-stream', data: base64 } }];
+  for (let i = 0; i < lista.length; i++) {
+    try {
+      const resultado = await generarConReintentos(lista[i], partes, intentos);
+      const datos = JSON.parse(resultado.response.text());
+      if (i > 0) datos.usoRespaldo = true;
+      return datos;
+    } catch (err) {
+      if (!esCuotaAgotada(err) || i === lista.length - 1) throw err;
+    }
+  }
 }
 
 // ===================== Mi lista (hoja escrita a mano) =====================
@@ -178,7 +193,7 @@ Para CADA etiqueta cuyo renglón de la tabla tenga datos escritos, devuelve:
 Omite las etiquetas que caen en el encabezado de la tabla o en renglones vacíos. Fíjate bien en que cada
 etiqueta corresponda al renglón que está exactamente a su misma altura.${piezasEsperadas ? `
 En esta foto hay aproximadamente ${piezasEsperadas} renglones con datos: devuélvelos TODOS, no te detengas en el primero.` : ''}`;
-  return preguntarConArchivo(modeloEtiquetas, prompt, file, 3);
+  return preguntarConArchivo([modeloEtiquetas, crearModelo(esquemaEtiquetas)], prompt, file, 3);
 }
 
 // ===================== Ubicar UN renglón de la hoja en la foto =====================
@@ -221,7 +236,7 @@ Devuelve:
 Ambos como [ymin, xmin, ymax, xmax] con coordenadas normalizadas de 0 a 1000 respecto a la imagen completa,
 ajustados a las líneas del renglón (de la línea de arriba a la de abajo de ese renglón, no más).`;
   // Solo 2 intentos: el usuario está esperando con la ventana abierta.
-  return preguntarConArchivo(modeloUbicacion, prompt, file, 2);
+  return preguntarConArchivo([modeloUbicacion, crearModelo(esquemaUbicacion)], prompt, file, 2);
 }
 
 // ===================== Reporte del proveedor (PDF o imagen) =====================
@@ -283,7 +298,9 @@ También, si puedes leerlos, el nombre del cliente y la descripción del materia
 Prioriza la precisión: revisa cada orilla con calma antes de responder, no adivines rápido.`;
 
 async function leerReporteProveedorConIA(file) {
-  const resultado = await preguntarConArchivo(modeloReporte, PROMPT_REPORTE, file);
+  // Si se agotó la cuota del modelo completo, se lee con el lite: distingue peor las orillas
+  // con cubrecanto, por eso la app avisa que se revise (resultado.usoRespaldo).
+  const resultado = await preguntarConArchivo([modeloReporte, crearModelo(esquemaReporte)], PROMPT_REPORTE, file);
   resultado.piezas = (resultado.piezas || []).map(p => ({
     cantidad: p.cantidad,
     base: p.base,

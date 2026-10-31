@@ -238,7 +238,7 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
     const reloj = setInterval(pintar, 1000);
     try {
       const reporte = await window.leerReporteProveedorConIA(file);
-      if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true };
+      if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true, conRespaldo: !!reporte.usoRespaldo };
       fallaIA = { error: 'la IA no encontró piezas en el archivo' };
     } catch (err) {
       console.error(err);
@@ -269,11 +269,13 @@ async function procesarArchivosProveedor(files) {
   let archivosConCubrecanto = 0;
   let huboError = false;
   let ultimaFallaIA = null;
+  let usoRespaldo = false;
 
   for (let i = 0; i < files.length; i++) {
     try {
-      const { reporte, conCubrecanto, fallaIA } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
+      const { reporte, conCubrecanto, conRespaldo, fallaIA } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
       if (fallaIA) ultimaFallaIA = fallaIA;
+      if (conRespaldo) usoRespaldo = true;
       if (!reporte.piezas || reporte.piezas.length === 0) {
         huboError = true;
         continue;
@@ -296,7 +298,9 @@ async function procesarArchivosProveedor(files) {
   } else {
     const notaCubrecanto = archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
     const notaError = huboError ? ' — algún archivo falló, revisa' : '';
-    estadoTexto.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} archivo(s)${notaCubrecanto}${notaError}. Revísalas antes de comparar.`;
+    // Se agotó la cuota del modelo completo y se leyó con el rápido: el cubrecanto puede venir mal.
+    const notaRespaldo = usoRespaldo ? ' Ojo: por cuota agotada de la IA se leyó con el modelo rápido, que distingue peor el cubrecanto; revísalo.' : '';
+    estadoTexto.textContent = `Se agregaron ${totalPiezas} pieza(s) de ${files.length} archivo(s)${notaCubrecanto}${notaError}. Revísalas antes de comparar.${notaRespaldo}`;
   }
 }
 
