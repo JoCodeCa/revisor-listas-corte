@@ -2,9 +2,9 @@
 // tabla impresa, un poco chueca, con sombra y con trazos que simulan la letra a mano.
 'use strict';
 const assert = require('assert');
-const { estimarInclinacion, detectarLineas, estructura } = require('./renglones.js');
+const { estimarInclinacion, detectarLineas, estructura, tintaPorRenglon, renglonesEscritos } = require('./renglones.js');
 
-function hojaSintetica({ inclinacion = 0.012, renglones = 20, cuadritos = false } = {}) {
+function hojaSintetica({ inclinacion = 0.012, renglones = 20, cuadritos = false, escritos = renglones, encabezado = false } = {}) {
   const w = 600, h = 900;
   const gris = new Uint8Array(w * h);
   // Papel con sombra (más oscuro hacia la derecha y abajo) y algo de ruido.
@@ -35,7 +35,14 @@ function hojaSintetica({ inclinacion = 0.012, renglones = 20, cuadritos = false 
     }
   }
   // "Letra": trazos cortos dentro de las celdas de números.
-  for (let r = 1; r < lineasY.length - 1; r++) {
+  // Encabezado impreso ("Cant.", "Lado A"…): también tiene tinta en esas columnas.
+  if (encabezado) for (let c = 1; c < 4; c++) {
+    const cx = (lineasX[c] + lineasX[c + 1]) / 2, cy = (lineasY[0] + lineasY[1]) / 2;
+    for (let k = 0; k < 60; k++) pinta(Math.round(cx - 25 + azar() * 50), Math.round(cy - 6 + azar() * 12));
+  }
+  // Solo los primeros "escritos" renglones tienen letra; los demás quedan vacíos (como en la hoja
+  // real, que trae muchos renglones y se llenan solo los de arriba).
+  for (let r = 1; r < Math.min(lineasY.length - 1, escritos + 1); r++) {
     for (let c = 1; c < 4; c++) {
       const cx = (lineasX[c] + lineasX[c + 1]) / 2, cy = (lineasY[r] + lineasY[r + 1]) / 2;
       for (let k = 0; k < 40; k++) pinta(Math.round(cx - 20 + azar() * 40), Math.round(cy - 8 + azar() * 16));
@@ -77,6 +84,22 @@ console.log('OK: en una foto sin tabla no inventa renglones');
   assert.ok(Math.abs(Math.tan(estimarInclinacion(chueca.gris, chueca.w, chueca.h)) - 0.02) < 0.004, 'mide la inclinación aunque haya cuadritos');
 }
 console.log('OK: los cuadritos de las casillas de enchape no parten renglones ni mueven el corte');
+
+// Renglones escritos: con 30 renglones y solo 13 llenos (como la 2a foto real), debe distinguir
+// cuáles tienen letra; el encabezado impreso también cuenta como "escrito" y va primero.
+{
+  const hoja = hojaSintetica({ inclinacion: 0, renglones: 30, escritos: 13, encabezado: true, cuadritos: true });
+  const lineas = detectarLineas(hoja.gris, hoja.w, hoja.h);
+  const e = estructura(lineas, hoja.w, hoja.h);
+  const escritos = renglonesEscritos(tintaPorRenglon(hoja.gris, hoja.w, hoja.h, e.renglones, lineas.verticales));
+  assert.deepStrictEqual(escritos, Array.from({ length: 14 }, (_, i) => i), `debe marcar el encabezado y los 13 renglones llenos (marcó ${escritos})`);
+  const sinEncabezado = hojaSintetica({ inclinacion: 0, renglones: 30, escritos: 13 });
+  const l2 = detectarLineas(sinEncabezado.gris, sinEncabezado.w, sinEncabezado.h);
+  const e2 = estructura(l2, sinEncabezado.w, sinEncabezado.h);
+  const escritos2 = renglonesEscritos(tintaPorRenglon(sinEncabezado.gris, sinEncabezado.w, sinEncabezado.h, e2.renglones, l2.verticales));
+  assert.deepStrictEqual(escritos2, Array.from({ length: 13 }, (_, i) => i + 1), `sin encabezado escrito: los 13 llenos (marcó ${escritos2})`);
+}
+console.log('OK: distingue los renglones escritos a mano de los vacíos');
 
 // Inclinación: debe medirla bien para poder enderezar la foto antes de detectar.
 for (const inclinacion of [0, 0.02, -0.03, 0.05]) {

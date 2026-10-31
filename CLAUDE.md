@@ -31,7 +31,7 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 | `ia.js` | Lectura con Gemini vía Firebase AI Logic + App Check (hoja manuscrita y reporte del proveedor con cubrecanto). |
 | `pdfParser.js` | Texto de PDF con pdf.js (respaldo si la IA falla). |
 | `fotos.js` | Fotos de "mi lista" en IndexedDB (`revisor-cortes-fotos`) para revisar números dudosos contra la hoja. |
-| `renglones.js` | Ubica los renglones en la foto SIN IA: endereza la foto y detecta las líneas impresas de la tabla. Luego la IA solo lee qué hay en cada renglón etiquetado (F1, F2…, `leerRenglonesEtiquetadosConIA`) y se empareja con las piezas (No. de hoja + valores). Una consulta por foto. La IA dando coordenadas directamente (`ubicarRenglonConIA`) salía corrida varios renglones; solo queda como respaldo si no se detectan líneas. Pruebas: `node test-renglones.js`. |
+| `renglones.js` | Ubica los renglones en la foto SIN IA: endereza la foto y detecta las líneas impresas de la tabla (ignorando los cuadritos de las casillas de enchape). Emparejar pieza↔renglón: 1) sin IA, por tinta: los renglones con letra en Cant./Lado A/Lado B son encabezado + piezas de corrido, y las piezas se leyeron en orden (`asignarPorTinta`); 2) si no cuadra, la IA (modelo completo) lee los renglones etiquetados F1, F2… (`leerRenglonesEtiquetadosConIA`) y se empareja por No. de hoja + valores; 3) último respaldo: coordenadas directas de la IA (`ubicarRenglonConIA`, salen corridas, se marca "aproximada"). Pruebas: `node test-renglones.js`. |
 | `tema.js` | Tema claro/oscuro/automático (`revisor-cortes:tema`), se carga en `<head>`. |
 | `sw.js`, `compartir.html`, `manifest.json` | "Compartir a esta app" desde WhatsApp (Web Share Target). |
 

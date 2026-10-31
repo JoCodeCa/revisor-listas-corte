@@ -159,9 +159,14 @@ const esquemaEtiquetas = Schema.object({
   },
 });
 
-const modeloEtiquetas = crearModelo(esquemaEtiquetas);
+// Modelo completo: con hojas de muchos renglones (45) el lite devolvía uno solo. Es una consulta
+// por foto y solo cuando la app no pudo emparejar los renglones por su cuenta (ver app.js).
+const modeloEtiquetas = getGenerativeModel(ai, {
+  model: 'gemini-3.8-flash',
+  generationConfig: { responseMimeType: 'application/json', responseSchema: esquemaEtiquetas },
+});
 
-async function leerRenglonesEtiquetadosConIA(file, total) {
+async function leerRenglonesEtiquetadosConIA(file, total, piezasEsperadas) {
   const prompt = `Esta es una foto de una hoja de pedido de corte escrita a mano: una tabla con columnas No., Cantidad,
 Lado A, Lado B y casillas de enchape. A la IZQUIERDA de la foto agregamos una columna blanca con etiquetas rojas
 F1, F2, … F${total}: cada etiqueta está a la altura de un renglón de la tabla, entre dos rayitas rojas.
@@ -171,7 +176,8 @@ Para CADA etiqueta cuyo renglón de la tabla tenga datos escritos, devuelve:
 - numeroHoja: el número de la columna No. de ese renglón,
 - cantidad, ladoA, ladoB: lo que está escrito en ese renglón (usa punto decimal).
 Omite las etiquetas que caen en el encabezado de la tabla o en renglones vacíos. Fíjate bien en que cada
-etiqueta corresponda al renglón que está exactamente a su misma altura.`;
+etiqueta corresponda al renglón que está exactamente a su misma altura.${piezasEsperadas ? `
+En esta foto hay aproximadamente ${piezasEsperadas} renglones con datos: devuélvelos TODOS, no te detengas en el primero.` : ''}`;
   return preguntarConArchivo(modeloEtiquetas, prompt, file, 3);
 }
 

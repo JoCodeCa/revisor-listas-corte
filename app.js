@@ -504,6 +504,34 @@ function parecidoRenglon(fila, lectura) {
   return puntos;
 }
 
+// Recuadro EXACTO (de línea a línea de la tabla) del renglón i detectado en la foto.
+function ubicacionDeRenglon(est, i) {
+  const [y0, y1] = est.renglones[i];
+  return {
+    numeros: [y0, est.izquierda, y1, est.corte],
+    enchape: [y0, est.corte, y1, est.derecha],
+    angulo: est.angulo,
+    exacta: true,
+    version: VERSION_UBICACION,
+  };
+}
+
+// Sin IA: las piezas de una foto se leyeron en orden de arriba a abajo, y los renglones con
+// letra a mano (tinta en Cant./Lado A/Lado B) son el encabezado impreso seguido de esas piezas,
+// de corrido. Si las cuentas cuadran, la k-ésima pieza es el k-ésimo de los últimos N renglones
+// escritos. Devuelve false si no cuadra (y entonces se le pregunta a la IA).
+function asignarPorTinta(fotoId, est) {
+  const filas = estado.misFilas.filter(f => f.fotoId === fotoId);
+  const escritos = Renglones.renglonesEscritos(est.tinta);
+  const n = filas.length;
+  if (!n || escritos.length < n || escritos.length > n + 2) return false;
+  const datos = escritos.slice(escritos.length - n);
+  if (!datos.every((r, i) => i === 0 || r === datos[i - 1] + 1)) return false;
+  filas.forEach((fila, k) => { fila.ubicacion = ubicacionDeRenglon(est, datos[k]); });
+  guardarEstado();
+  return true;
+}
+
 // Empareja las piezas de una foto con los renglones detectados y guarda en cada pieza el
 // recuadro EXACTO de su renglón (de línea a línea de la tabla).
 function asignarRenglones(fotoId, est, lecturas) {
@@ -519,14 +547,7 @@ function asignarRenglones(fotoId, est, lecturas) {
   const asignar = (fila, lectura) => {
     filasUsadas.add(fila);
     lecturasUsadas.add(lectura);
-    const [y0, y1] = est.renglones[lectura.etiqueta - 1];
-    fila.ubicacion = {
-      numeros: [y0, est.izquierda, y1, est.corte],
-      enchape: [y0, est.corte, y1, est.derecha],
-      angulo: est.angulo,
-      exacta: true,
-      version: VERSION_UBICACION,
-    };
+    fila.ubicacion = ubicacionDeRenglon(est, lectura.etiqueta - 1);
   };
   for (const { fila, lectura } of pares) {
     if (!filasUsadas.has(fila) && !lecturasUsadas.has(lectura)) asignar(fila, lectura);
@@ -565,8 +586,11 @@ function analizarFoto(fotoId) {
       if (!bitmap) return { error: 'la foto ya no está guardada' };
       const est = await Renglones.analizar(bitmap);
       if (est.renglones.length < 3) return { error: 'no se distinguen las líneas de la tabla', sinLineas: true };
-      const etiquetada = await Renglones.etiquetar(bitmap, est.renglones, est.angulo);
-      const r = await conLimite(window.leerRenglonesEtiquetadosConIA(etiquetada, est.renglones.length));
+      // Primero sin IA (instantáneo, sin gastar cuota); la IA solo si las cuentas no cuadran.
+      if (asignarPorTinta(fotoId, est)) return { ok: true };
+      const piezas = estado.misFilas.filter(f => f.fotoId === fotoId).length;
+      const etiquetada = await Renglones.etiquetar(bitmap, est.renglones, est.angulo, 2000);
+      const r = await conLimite(window.leerRenglonesEtiquetadosConIA(etiquetada, est.renglones.length, piezas));
       const lecturas = (r?.renglones || []).filter(l => Number.isInteger(l.etiqueta) && l.etiqueta >= 1 && l.etiqueta <= est.renglones.length);
       const resumen = asignarRenglones(fotoId, est, lecturas);
       return { ok: true, resumen };
@@ -598,7 +622,7 @@ function ubicarRenglon(fila) {
         const directa = await ubicarRenglonSoloIA(fila);
         if (directa.ubicacion) return directa;
         if (r.ok) {
-          const { renglones, leidos, emparejadas, piezas } = r.resumen;
+          const { renglones, leidos, emparejadas, piezas } = r.resumen || {};
           return {
             error: 'la IA no reconoció este renglón en la foto',
             detalle: `renglones detectados: ${renglones}, leídos por la IA: ${leidos}, piezas emparejadas: ${emparejadas} de ${piezas}. ${directa.detalle || directa.error || ''}`.trim(),

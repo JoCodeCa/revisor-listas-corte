@@ -171,6 +171,40 @@ const Renglones = (() => {
     return { renglones, izquierda, derecha, corte };
   }
 
+  // Cuánta "tinta" hay en cada renglón dentro de las celdas Cant., Lado A y Lado B (lo que se
+  // escribe a mano). La columna No. se ignora porque trae el número impreso en todos los
+  // renglones, aun en los vacíos. Se mide solo el centro de cada celda para no contar las líneas
+  // de la tabla. Devuelve una fracción por renglón, o null si no se ubicaron las columnas.
+  function tintaPorRenglon(gris, w, h, renglones, verticales) {
+    if (verticales.length < 5) return null;
+    const oscuro = pixelesOscuros(gris, w, h);
+    const celdas = [1, 2, 3].map(c => {
+      const a = verticales[c], b = verticales[c + 1];
+      return [Math.round(a + (b - a) * 0.12), Math.round(b - (b - a) * 0.12)];
+    });
+    return renglones.map(([y0n, y1n]) => {
+      const y0 = y0n / 1000 * h, y1 = y1n / 1000 * h;
+      const ya = Math.round(y0 + (y1 - y0) * 0.2), yb = Math.round(y1 - (y1 - y0) * 0.2);
+      let tinta = 0, total = 0;
+      for (let y = ya; y < yb; y++) {
+        for (const [xa, xb] of celdas) {
+          for (let x = xa; x < xb; x++) { tinta += oscuro[y * w + x]; total++; }
+        }
+      }
+      return total ? tinta / total : 0;
+    });
+  }
+
+  // Qué renglones tienen algo escrito: los que tienen claramente más tinta que un renglón vacío.
+  // El umbral es relativo a los más entintados (la letra y la foto cambian mucho de hoja a hoja).
+  function renglonesEscritos(tinta) {
+    if (!tinta || !tinta.length) return [];
+    const ordenados = [...tinta].sort((a, b) => b - a);
+    const referencia = ordenados[Math.min(2, ordenados.length - 1)];
+    const umbral = Math.max(0.004, referencia * 0.2);
+    return tinta.map((t, i) => (t >= umbral ? i : -1)).filter(i => i !== -1);
+  }
+
   // ===================== Solo navegador =====================
 
   // Dibuja la foto girada -angulo alrededor de su centro (para enderezarla), en el contexto ya
@@ -206,7 +240,9 @@ const Renglones = (() => {
     const original = grisesDe(bitmap, 0);
     const angulo = estimarInclinacion(original.gris, original.w, original.h);
     const { gris, w, h } = angulo ? grisesDe(bitmap, angulo) : original;
-    return { ...estructura(detectarLineas(gris, w, h), w, h), angulo };
+    const lineas = detectarLineas(gris, w, h);
+    const est = estructura(lineas, w, h);
+    return { ...est, angulo, tinta: tintaPorRenglon(gris, w, h, est.renglones, lineas.verticales) };
   }
 
   // Copia de la foto con una columna a la izquierda que numera cada renglón detectado (F1, F2…)
@@ -245,7 +281,7 @@ const Renglones = (() => {
     return blob;
   }
 
-  return { estimarInclinacion, detectarLineas, estructura, analizar, etiquetar, dibujarEnderezada };
+  return { estimarInclinacion, detectarLineas, estructura, tintaPorRenglon, renglonesEscritos, analizar, etiquetar, dibujarEnderezada };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
