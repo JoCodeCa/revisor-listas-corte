@@ -136,9 +136,14 @@
   <section class="panel" id="panel-proveedor">
     <h2>2. Reporte del proveedor</h2>
 
+    <label class="campo-proveedor">
+      Proveedor
+      <select id="proveedor-perfil"></select>
+    </label>
+
     <div class="acciones-fila">
       <label class="btn btn-secundario btn-archivo">
-        Subir reporte(s) del proveedor (PDF, foto o captura)
+        Subir reporte(s) de <span data-nombre-proveedor>PG Maderas</span> (PDF, foto o captura)
         <input type="file" id="input-pdf" accept="application/pdf,image/*,.txt,text/plain" multiple hidden>
       </label>
       <span id="pdf-estado" class="estado-texto"></span>
@@ -213,7 +218,7 @@
     <h2>4. Correcciones a enviar</h2>
     <textarea id="texto-correcciones" rows="8" readonly></textarea>
     <label class="campo-telefono">
-      Teléfono de WhatsApp del proveedor (opcional, con código de país, sin espacios ni símbolos — ej. 52155xxxxxxxx)
+      Teléfono de WhatsApp de <span data-nombre-proveedor>PG Maderas</span> (opcional, con código de país, sin espacios ni símbolos — ej. 52155xxxxxxxx)
       <input type="tel" id="proveedor-telefono" placeholder="52155xxxxxxxx" inputmode="numeric">
     </label>
     <div class="acciones-fila">

@@ -6,7 +6,7 @@
 - **Subir los cambios directo a `main`** al terminar cada tarea (commit + push), sin PR,
   para probarlos rápido en línea. Si la sesión trabaja en otra rama, también empujar a `main`
   (`git push origin HEAD:main`, solo si es fast-forward; si no, traer `main` primero).
-- Antes de cada push: `node test-engine.js` y `node test-renglones.js` deben pasar. Si el cambio es visual, revisarlo en
+- Antes de cada push: `node test-engine.js` y `node test-renglones.js` deben pasar (este último también revisa la sintaxis de todos los .js del navegador). Si el cambio es visual, revisarlo en
   el navegador (Playwright) en modo claro y oscuro y a ancho de celular.
 - Después de cada push a `main`, **confirmar que la publicación de GitHub Actions terminó en
   verde** (no basta con que las pruebas pasen localmente). Si falla, leer el log y arreglarlo
@@ -44,9 +44,21 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
 - Estados de resultado: `ok`, `cantidad`, `medida`, `invertida`, `enchape`, `falta`, `sobra`.
   `medida` = pieza mía sin pareja + pieza del proveedor sobrante que comparten un lado (se juntan en un solo error).
 
+## Perfiles de proveedor
+
+- Mi lista (formato del taller) es la misma para todos; cambia el formato del REPORTE de cada proveedor.
+- `PERFILES_PROVEEDOR` en `app.js` (id + nombre, selector en la sección 2) y `PROMPTS_REPORTE` en `ia.js`
+  (un prompt por id). Todos los prompts responden el MISMO esquema (cantidad, base, altura en mm, 4 orillas de la
+  pieza dibujada con la base horizontal, `cubrecantoIndicado`), así la conversión y la comparación son únicas.
+- **PG Maderas** (`pg-maderas`): afinado con reportes reales (tabla "Piezas ubicadas" + dibujo "Esquema"). El
+  parser de texto `parseReporteProveedor` (respaldo sin IA) es de este formato.
+- **Becor** (`becor`): prompt GENERAL, pendiente de afinar con un reporte real de Becor.
+- Teléfono de WhatsApp por proveedor: `estado.proveedorTelefonos[id]` (el antiguo `proveedorTelefono` se migró a PG Maderas).
+- Agregar un proveedor: una entrada en `PERFILES_PROVEEDOR` y su prompt en `PROMPTS_REPORTE`.
+
 ## Convenciones
 
 - Código, comentarios y textos de la UI en español; comentarios explican el porqué.
 - Colores solo con variables CSS de `style.css` (`:root` + modo oscuro); no usar colores fijos
   nuevos para que ambos temas sigan funcionando.
-- `proveedorTelefono` y el tema sobreviven a "Borrar todo"; el resto del estado se reinicia.
+- El proveedor elegido, sus teléfonos y el tema sobreviven a "Borrar todo"; el resto del estado se reinicia.

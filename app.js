@@ -12,6 +12,17 @@ const filaProvVacia = () => ({
   observacion: '',
 });
 
+// Proveedores: mi lista es igual para todos; cambia el formato del reporte que regresa cada uno
+// (ver PROMPTS_REPORTE en ia.js) y su WhatsApp. El id es el que usa ia.js.
+const PERFILES_PROVEEDOR = [
+  { id: 'pg-maderas', nombre: 'PG Maderas' },
+  { id: 'becor', nombre: 'Becor' },
+];
+
+function perfilActual() {
+  return PERFILES_PROVEEDOR.find(p => p.id === estado.proveedor) || PERFILES_PROVEEDOR[0];
+}
+
 let estado = {
   material: '',
   cubrecanto: '',
@@ -19,7 +30,8 @@ let estado = {
   provFilas: [],
   provCliente: '',
   provMaterial: '',
-  proveedorTelefono: '',
+  proveedor: 'pg-maderas',
+  proveedorTelefonos: {}, // por proveedor: { 'pg-maderas': '52...', 'becor': '52...' }
 };
 
 function cargarEstado() {
@@ -29,6 +41,13 @@ function cargarEstado() {
       estado = { ...estado, ...guardado };
     }
   } catch (e) { /* localStorage no disponible o corrupto: seguimos con el estado por defecto */ }
+  // Antes había un solo teléfono, y todo lo configurado era de PG Maderas.
+  if (estado.proveedorTelefono !== undefined) {
+    if (estado.proveedorTelefono && !estado.proveedorTelefonos['pg-maderas']) {
+      estado.proveedorTelefonos = { ...estado.proveedorTelefonos, 'pg-maderas': estado.proveedorTelefono };
+    }
+    delete estado.proveedorTelefono;
+  }
 }
 
 function guardarEstado() {
@@ -117,6 +136,27 @@ document.getElementById('btn-agregar-fila').addEventListener('click', () => {
 });
 
 // ===================== PROVEEDOR =====================
+
+// Muestra el proveedor elegido: selector, textos con su nombre y su teléfono de WhatsApp.
+function renderPerfilProveedor() {
+  const perfil = perfilActual();
+  const selector = document.getElementById('proveedor-perfil');
+  if (!selector.options.length) {
+    PERFILES_PROVEEDOR.forEach(p => selector.add(new Option(p.nombre, p.id)));
+  }
+  selector.value = perfil.id;
+  document.querySelectorAll('[data-nombre-proveedor]').forEach(el => { el.textContent = perfil.nombre; });
+  document.getElementById('proveedor-telefono').value = estado.proveedorTelefonos[perfil.id] || '';
+}
+
+document.getElementById('proveedor-perfil').addEventListener('change', (e) => {
+  estado.proveedor = e.target.value;
+  guardarEstado();
+  renderPerfilProveedor();
+  // El mensaje de correcciones ya armado ahora va al WhatsApp de este proveedor.
+  const texto = document.getElementById('texto-correcciones').value;
+  if (texto) actualizarEnlaceWhatsapp(texto);
+});
 
 function renderProveedor() {
   const infoDiv = document.getElementById('info-proveedor');
@@ -243,7 +283,7 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
     pintar();
     const reloj = setInterval(pintar, 1000);
     try {
-      const reporte = await window.leerReporteProveedorConIA(file);
+      const reporte = await window.leerReporteProveedorConIA(file, estado.proveedor);
       if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true, conRespaldo: reporte.usoRespaldo ? (reporte.cuotaRespaldo || {}) : null };
       fallaIA = { error: 'la IA no encontró piezas en el archivo' };
     } catch (err) {
@@ -842,13 +882,13 @@ function estadoAClase(estadoPieza) {
 }
 
 function actualizarEnlaceWhatsapp(texto) {
-  const telefono = (estado.proveedorTelefono || '').replace(/\D/g, '');
+  const telefono = (estado.proveedorTelefonos[estado.proveedor] || '').replace(/\D/g, '');
   const base = telefono ? `https://wa.me/${telefono}` : 'https://wa.me/';
   document.getElementById('btn-whatsapp').href = `${base}?text=${encodeURIComponent(texto)}`;
 }
 
 document.getElementById('proveedor-telefono').addEventListener('input', (e) => {
-  estado.proveedorTelefono = e.target.value;
+  estado.proveedorTelefonos = { ...estado.proveedorTelefonos, [estado.proveedor]: e.target.value };
   guardarEstado();
   const texto = document.getElementById('texto-correcciones').value;
   if (texto) actualizarEnlaceWhatsapp(texto);
@@ -936,7 +976,9 @@ document.getElementById('btn-borrar-todo').addEventListener('click', () => {
     provFilas: [],
     provCliente: '',
     provMaterial: '',
-    proveedorTelefono: estado.proveedorTelefono, // el teléfono del proveedor no cambia por pedido, se conserva
+    // El proveedor elegido y sus teléfonos no cambian por pedido: se conservan.
+    proveedor: estado.proveedor,
+    proveedorTelefonos: estado.proveedorTelefonos,
   };
   guardarEstado();
   Fotos.borrarTodas();
@@ -1034,5 +1076,5 @@ cargarEstado();
 renderMia();
 Fotos.limpiarSinUso(estado.misFilas.map(f => f.fotoId).filter(Boolean));
 renderProveedor();
-document.getElementById('proveedor-telefono').value = estado.proveedorTelefono || '';
+renderPerfilProveedor();
 revisarArchivoCompartido();

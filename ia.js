@@ -297,9 +297,12 @@ const esquemaReporte = Schema.object({
   properties: {
     cliente: Schema.string(),
     material: Schema.string(),
+    // Si el reporte no indica cubrecanto en ninguna forma, las orillas no significan nada y la
+    // app no debe compararlas (si no, marcaría "cubrecanto incorrecto" en todo).
+    cubrecantoIndicado: Schema.boolean(),
     piezas: Schema.array({ items: esquemaPiezaReporte }),
   },
-  optionalProperties: ['cliente', 'material'],
+  optionalProperties: ['cliente', 'material', 'cubrecantoIndicado'],
 });
 
 // Para esta parte usamos el modelo completo (no el "lite"): distinguir una línea
@@ -310,7 +313,14 @@ const modeloReporte = getGenerativeModel(ai, {
   generationConfig: { responseMimeType: 'application/json', responseSchema: esquemaReporte },
 });
 
-const PROMPT_REPORTE = `Este es un reporte generado por un software de optimización de corte de tableros
+// ===================== Un prompt por proveedor =====================
+// Mi lista es igual para todos los proveedores; lo que cambia es el formato del reporte que
+// cada uno regresa. Cada perfil explica a la IA su formato, pero todos responden con el mismo
+// esquema (cantidad, base, altura en mm y las 4 orillas de la pieza dibujada con la base
+// horizontal), así la conversión a "mi lista" y la comparación son las mismas.
+
+// PG Maderas: reporte de su software de optimización, con dibujo ("Esquema") de cada pieza.
+const PROMPT_PG_MADERAS = `Este es un reporte generado por un software de optimización de corte de tableros
 (melamina/MDF/triplay) para un taller de carpintería. Tiene una sección "Piezas ubicadas" con una tabla de
 columnas: Esquema (un dibujo del rectángulo de la pieza), Cant, Base, Altura, Observación.
 
@@ -333,13 +343,45 @@ Para cada fila devuelve: cantidad (entero), base y altura (números, pueden tene
 decimal), las 4 orillas (true/false cada una), y observacion (el texto de esa columna si tiene, si no
 cadena vacía).
 También, si puedes leerlos, el nombre del cliente y la descripción del material del encabezado del reporte.
-Prioriza la precisión: revisa cada orilla con calma antes de responder, no adivines rápido.`;
+Prioriza la precisión: revisa cada orilla con calma antes de responder, no adivines rápido.
+Devuelve cubrecantoIndicado = true (este formato siempre indica el cubrecanto con el dibujo).`;
 
-async function leerReporteProveedorConIA(file) {
+// Becor: formato general mientras no se afine con un reporte real de Becor.
+const PROMPT_BECOR = `Este es el reporte u orden de corte que el proveedor de tableros "Becor" generó al capturar el pedido de
+un taller de carpintería (melamina/MDF/aglomerado). Puede ser una tabla, una captura de pantalla de su sistema o un
+PDF, con columnas como Cantidad/Cant/Piezas, Largo/Base y Ancho/Altura, y a veces el cubrecanto (canto, tapacanto,
+enchape, chapacinta) indicado con columnas, marcas, códigos de lados o un dibujo de la pieza.
+
+Lee SOLO las piezas del pedido (ignora totales, tableros/planchas usados, precios y encabezados).
+Para cada pieza devuelve:
+- cantidad (entero),
+- base: la PRIMERA medida de la pieza (largo/base) y altura: la SEGUNDA (ancho/altura), EN MILÍMETROS
+  (si el reporte está en centímetros, multiplica por 10; usa punto decimal),
+- el cubrecanto como 4 orillas de la pieza imaginándola dibujada con la base HORIZONTAL y la altura VERTICAL:
+  bordeSuperior y bordeInferior son las orillas a lo largo de la base; bordeIzquierdo y bordeDerecho las orillas
+  a lo largo de la altura. Si el reporte dice cuántos lados largos/cortos llevan canto, repártelos en ese orden
+  (primero superior/izquierdo, luego inferior/derecho).
+- observacion: notas de esa pieza si las hay, si no cadena vacía.
+Si el reporte NO indica el cubrecanto de ninguna forma, devuelve cubrecantoIndicado = false y las 4 orillas en false;
+si sí lo indica, cubrecantoIndicado = true.
+También, si puedes leerlos, el nombre del cliente y la descripción del material.
+Prioriza la precisión de cantidades y medidas.`;
+
+const PROMPTS_REPORTE = { 'pg-maderas': PROMPT_PG_MADERAS, 'becor': PROMPT_BECOR };
+
+async function leerReporteProveedorConIA(file, perfil = 'pg-maderas') {
+  const prompt = PROMPTS_REPORTE[perfil] || PROMPT_BECOR;
   // Si se agotó la cuota del modelo completo, se lee con el lite: distingue peor las orillas
   // con cubrecanto, por eso la app avisa que se revise (resultado.usoRespaldo).
-  const resultado = await preguntarConArchivo([modeloReporte, crearModelo(esquemaReporte)], PROMPT_REPORTE, file);
-  resultado.piezas = (resultado.piezas || []).map(p => ({
+  const resultado = await preguntarConArchivo([modeloReporte, crearModelo(esquemaReporte)], prompt, file);
+  const sinCubrecanto = resultado.cubrecantoIndicado === false;
+  resultado.piezas = (resultado.piezas || []).map(p => sinCubrecanto ? {
+    // El reporte no dice nada de cubrecanto: sin campos de enchape, la app no lo compara.
+    cantidad: p.cantidad,
+    base: p.base,
+    altura: p.altura,
+    observacion: p.observacion || '',
+  } : {
     cantidad: p.cantidad,
     base: p.base,
     altura: p.altura,
@@ -352,7 +394,7 @@ async function leerReporteProveedorConIA(file) {
     enchapeB1: !!p.bordeSuperior,
     enchapeB2: !!p.bordeInferior,
     observacion: p.observacion || '',
-  }));
+  });
   return resultado;
 }
 

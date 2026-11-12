@@ -109,4 +109,20 @@ for (const inclinacion of [0, 0.02, -0.03, 0.05]) {
 }
 console.log('OK: mide la inclinación de la foto (para enderezarla)');
 
+// Sintaxis de los scripts del navegador: un error de sintaxis tumba la app entera en línea y
+// estas pruebas corren antes de publicar. ia.js es un módulo ES (import), se revisa como tal.
+{
+  const { execFileSync } = require('child_process');
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  for (const archivo of ['app.js', 'engine.js', 'fotos.js', 'pdfParser.js', 'renglones.js', 'sw.js', 'tema.js']) {
+    execFileSync(process.execPath, ['--check', path.join(__dirname, archivo)]);
+  }
+  const copia = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ia-')), 'ia.mjs');
+  fs.copyFileSync(path.join(__dirname, 'ia.js'), copia);
+  execFileSync(process.execPath, ['--check', copia]);
+}
+console.log('OK: los scripts del navegador no tienen errores de sintaxis');
+
 console.log('\nTodas las pruebas de renglones pasaron.');
