@@ -913,10 +913,6 @@ function estadoALegible(estadoPieza) {
   const mapa = { ok: 'Coincide', cantidad: 'Cantidad incorrecta', invertida: 'Veta mal orientada', medida: 'Medida incorrecta', enchape: 'Cubrecanto incorrecto', falta: 'Falta en proveedor', sobra: 'Pieza no solicitada' };
   return mapa[estadoPieza] || estadoPieza;
 }
-function estadoAClase(estadoPieza) {
-  if (estadoPieza === 'ok') return 'fila-ok';
-  return 'fila-error';
-}
 
 function actualizarEnlaceWhatsapp(texto) {
   const telefono = (estado.proveedorTelefonos[estado.proveedor] || '').replace(/\D/g, '');
@@ -931,8 +927,66 @@ document.getElementById('proveedor-telefono').addEventListener('input', (e) => {
   if (texto) actualizarEnlaceWhatsapp(texto);
 });
 
+// ---- Resultado simplificado: primero solo lo que está mal (y solo el dato que difiere); las
+// piezas correctas quedan plegadas en una lista compacta. Antes se repetía todo de cada pieza
+// (incluido el cubrecanto) y la pantalla se saturaba.
+
+const fmt = n => String(n);
+const piezaCm = m => `${fmt(m.cantidad)} pz · ${fmt(m.ladoA_cm)} × ${fmt(m.ladoB_cm)} cm`;
+const piezaMm = p => `${fmt(p.cantidad)} pz · ${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm`;
+
+// Una frase corta con SOLO lo que no cuadra.
+function diferencia(r) {
+  const p = r.proveedor, m = r.mia;
+  switch (r.estado) {
+    case 'cantidad': return `El proveedor capturó <b>${fmt(p.cantidad)} pz</b>`;
+    case 'medida': {
+      const cant = p.cantidad !== m.cantidad ? ` y <b>${fmt(p.cantidad)} pz</b>` : '';
+      return `El proveedor capturó <b>${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm</b>${cant} (debía ser ${fmt(m.ladoA_mm)} × ${fmt(m.ladoB_mm)} mm)`;
+    }
+    case 'invertida': return `Lados cruzados: capturó <b>${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm</b> — la veta quedaría al revés`;
+    case 'enchape': return `Cubrecanto: pediste ${m.contarA}A/${m.contarB}B, capturó <b>${p.ladoAEnchapado}A/${p.ladoBEnchapado}B</b>`;
+    case 'falta': return 'No aparece en el reporte del proveedor';
+    case 'sobra': return `Pieza que no pediste: <b>${piezaMm(p)}</b>`;
+    default: return escaparHtml(r.mensaje);
+  }
+}
+
+function renderResultados(resultados) {
+  const problemas = resultados.filter(r => r.estado !== 'ok');
+  const correctas = resultados.filter(r => r.estado === 'ok');
+
+  const lista = document.getElementById('lista-problemas');
+  lista.innerHTML = problemas.length ? '' : '<p class="todo-coincide">✓ Todo coincide con tu lista</p>';
+  problemas.forEach(r => {
+    const tarjeta = document.createElement('div');
+    tarjeta.className = 'problema';
+    const titulo = r.mia ? `Pieza ${r.mia.no} · ${piezaCm(r.mia)}` : 'Del proveedor';
+    tarjeta.innerHTML = `
+      <div class="problema-encabezado">
+        <span class="problema-pieza">${titulo}</span>
+        <span class="estado-pill">${estadoALegible(r.estado)}</span>
+      </div>
+      <div class="problema-detalle">${diferencia(r)}</div>
+    `;
+    lista.appendChild(tarjeta);
+  });
+
+  const detalle = document.getElementById('detalle-correctas');
+  detalle.hidden = correctas.length === 0;
+  // Si todo está bien no hay nada más que ver; si hay problemas, las correctas van plegadas.
+  detalle.open = false;
+  document.getElementById('resumen-correctas').textContent = `✓ ${correctas.length} pieza(s) coinciden — ver`;
+  document.getElementById('lista-correctas').innerHTML = correctas
+    .map(r => `<li><span class="num-pieza">${r.mia.no}</span>${piezaCm(r.mia)}</li>`)
+    .join('');
+}
+
 document.getElementById('btn-comparar').addEventListener('click', () => {
-  const { resultados, resumen } = Engine.comparar(estado.misFilas, estado.provFilas);
+  // Se manda el No. de cada renglón de la tabla para que el resultado use la misma numeración
+  // (si no, los renglones vacíos de en medio la recorrían).
+  const misFilas = estado.misFilas.map((f, i) => ({ ...f, no: i + 1 }));
+  const { resultados, resumen } = Engine.comparar(misFilas, estado.provFilas);
 
   const resumenDiv = document.getElementById('resumen-comparacion');
   resumenDiv.hidden = false;
@@ -943,26 +997,7 @@ document.getElementById('btn-comparar').addEventListener('click', () => {
 
   const panelResultados = document.getElementById('panel-resultados');
   panelResultados.hidden = false;
-  const tbody = document.getElementById('tbody-resultados');
-  tbody.innerHTML = '';
-
-  resultados.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.className = estadoAClase(r.estado);
-    const colMia = r.mia
-      ? `${r.mia.cantidad} pza x ${r.mia.ladoA_cm} x ${r.mia.ladoB_cm} cm (cubrecanto: ${r.mia.contarA}A/${r.mia.contarB}B)`
-      : '—';
-    const colProv = r.proveedor
-      ? `${r.proveedor.cantidad} pza x ${r.proveedor.base_mm} x ${r.proveedor.altura_mm} mm` +
-        (r.proveedor.ladoAEnchapado !== null ? ` (cubrecanto: ${r.proveedor.ladoAEnchapado}A/${r.proveedor.ladoBEnchapado}B)` : '')
-      : '—';
-    tr.innerHTML = `
-      <td>${colMia}</td>
-      <td>${colProv}</td>
-      <td><span class="estado-pill">${estadoALegible(r.estado)}</span></td>
-    `;
-    tbody.appendChild(tr);
-  });
+  renderResultados(resultados);
 
   const panelCorrecciones = document.getElementById('panel-correcciones');
   if (resumen.conError > 0) {
