@@ -278,6 +278,37 @@ assert.deepStrictEqual(becorPdf.piezas[1], { cantidad: 2, base: 344, altura: 550
 assert.strictEqual(becorPdf.piezas[2].observacion, 'Rotación: Sí · Costado');
 console.log('OK: parseReporteBecor lee el texto tal como sale del PDF (Rotación en otra línea)');
 
+// Como sale del PDF REAL de Becor: los números van arriba en la celda y el "#" y la Rotación
+// abajo, así que el lector de PDF los separa en dos líneas por renglón.
+const textoBecorReal = `SketchCut
+Orden: Fecha: Fecha para entrega:
+Material: Espesor:
+Partes
+# Largo Ancho Cantidad Rotación Nombre PA
+2430 550 2
+1. No
+344 550 2
+2. No
+1084 100 12
+8. No
+873 514 2
+19. Sí Costado
+2
+SketchCut
+SketchCut
+2430 x 550
+Cantidad
+2 1 1
+Ancho
+550 100 100
+Piezas en el tablero Largo 2430 2365 1408`;
+const becorReal = parseReporteBecor(textoBecorReal);
+assert.strictEqual(becorReal.piezas.length, 4, `debe juntar medidas y "N." de líneas separadas (salieron ${becorReal.piezas.length})`);
+assert.deepStrictEqual(becorReal.piezas[2], { cantidad: 12, base: 1084, altura: 100, observacion: '' });
+assert.strictEqual(becorReal.piezas[3].observacion, 'Rotación: Sí · Costado');
+assert.strictEqual(becorReal.material, null, 'Material vacío en el encabezado: null, no "Espesor:"');
+console.log('OK: parseReporteBecor junta medidas y número de renglón que el PDF saca en líneas separadas');
+
 assert.strictEqual(parseReportePorProveedor(textoBecor, 'becor').piezas.length, 8);
 assert.strictEqual(parseReportePorProveedor(textoReporte, 'pg-maderas').piezas.length, 5);
 console.log('OK: parseReportePorProveedor usa el lector de cada proveedor');

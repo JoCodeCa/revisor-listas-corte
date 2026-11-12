@@ -304,28 +304,75 @@ function parseReporteBecor(texto) {
     if (m && m[1]) { material = m[1]; break; }
   }
 
-  // En el PDF, "No"/"Sí" de Rotación va un poco más abajo que los números del renglón y suele
-  // salir como una línea aparte; por eso es opcional aquí y se busca también en la siguiente.
-  const renglon = /^(\d{1,3})\s*\.\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+)(?:\s+(No|S[ií])(?=\s|$))?\s*(.*)$/i;
+  // Solo la sección "Partes": desde su encabezado hasta las hojas de acomodo ("Piezas en el
+  // tablero"), que repiten medidas en tablas sin numerar.
+  let inicio = lineas.findIndex(l => /Largo\s+Ancho\s+Cantidad/i.test(l));
+  if (inicio === -1) inicio = lineas.findIndex(l => /^Partes$/i.test(l));
+  const fin = lineas.findIndex((l, k) => k > inicio && /Piezas en el tablero/i.test(l));
+  const seccion = lineas.slice(inicio + 1, fin === -1 ? undefined : fin);
+
+  // En el PDF real los números (Largo, Ancho, Cantidad) van arriba en su celda y el "#" y la
+  // Rotación van más abajo, centrados: el lector de PDF los saca en líneas separadas
+  // ("2430 550 2" y "1. No"). Se aceptan las tres formas: todo junto, o medidas y "N." por
+  // separado (se emparejan en orden), con la Rotación en la misma línea o en la siguiente.
+  const NUM = '(\\d+(?:[.,]\\d+)?)';
+  const ROT = '(?:\\s+(No|S[ií])(?=\\s|$))?'; // (\b no sirve tras la "í")
+  const completo = new RegExp(`^(\\d{1,3})\\s*\\.\\s+${NUM}\\s+${NUM}\\s+(\\d+)${ROT}\\s*(.*)$`, 'i');
+  const medidas = new RegExp(`^${NUM}\\s+${NUM}\\s+(\\d+)${ROT}\\s*(.*)$`, 'i');
+  const numero = new RegExp(`^(\\d{1,3})\\s*\\.${ROT}\\s*(.*)$`, 'i');
   const soloRotacion = /^(No|S[ií])$/i;
-  const vistos = new Set();
-  const piezas = [];
-  lineas.forEach((l, i) => {
-    const m = l.match(renglon);
-    if (!m || vistos.has(m[1])) return; // el # no se repite (por si el encabezado sale dos veces)
-    vistos.add(m[1]);
-    const rotacion = m[5] || (soloRotacion.test(lineas[i + 1] || '') ? lineas[i + 1] : '');
-    const notas = [];
-    if (/^s/i.test(rotacion)) notas.push('Rotación: Sí');
-    const nombre = m[6].replace(/[☐□]/g, '').trim();
-    if (nombre) notas.push(nombre);
-    piezas.push({
-      cantidad: Number(m[4]),
-      base: normalizaNumero(m[2]),
-      altura: normalizaNumero(m[3]),
-      observacion: notas.join(' · '),
+
+  const filas = [];          // renglones con todo en una línea
+  const sueltasMedidas = []; // "2430 550 2"
+  const sueltosNumeros = []; // "1. No"
+  let ultimo = null;         // a quién se le pega una Rotación que viene sola en la línea siguiente
+  for (const l of seccion) {
+    let m;
+    if ((m = l.match(completo))) {
+      ultimo = { n: m[1], base: m[2], altura: m[3], cantidad: m[4], rotacion: m[5] || '', nombre: m[6] };
+      filas.push(ultimo);
+    } else if ((m = l.match(medidas))) {
+      ultimo = { base: m[1], altura: m[2], cantidad: m[3], rotacion: m[4] || '', nombre: m[5] };
+      sueltasMedidas.push(ultimo);
+    } else if ((m = l.match(numero))) {
+      ultimo = { n: m[1], rotacion: m[2] || '', nombre: m[3] };
+      sueltosNumeros.push(ultimo);
+    } else if (soloRotacion.test(l) && ultimo && !ultimo.rotacion) {
+      ultimo.rotacion = l;
+    }
+  }
+  // Una línea de medidas suelta solo cuenta si tiene su "N." para emparejarse: en las hojas de
+  // acomodo el texto girado sale como "2 1 1" o "550 100 100", que parecen medidas y no lo son.
+  // (Única excepción: si el PDF no trae ningún "N.", se toman las medidas solas.)
+  const conPareja = sueltosNumeros.length ? sueltasMedidas.slice(0, sueltosNumeros.length) : (filas.length ? [] : sueltasMedidas);
+  conPareja.forEach((med, k) => {
+    const num = sueltosNumeros[k] || {};
+    filas.push({
+      n: num.n || `s${k + 1}`,
+      base: med.base,
+      altura: med.altura,
+      cantidad: med.cantidad,
+      rotacion: med.rotacion || num.rotacion || '',
+      nombre: [med.nombre, num.nombre].filter(Boolean).join(' '),
     });
   });
+
+  const vistos = new Set();
+  const piezas = [];
+  for (const f of filas) {
+    if (vistos.has(f.n)) continue; // el # no se repite (por si el encabezado sale dos veces)
+    vistos.add(f.n);
+    const notas = [];
+    if (/^s/i.test(f.rotacion)) notas.push('Rotación: Sí');
+    const nombre = String(f.nombre || '').replace(/[☐□]/g, '').trim();
+    if (nombre) notas.push(nombre);
+    piezas.push({
+      cantidad: Number(f.cantidad),
+      base: normalizaNumero(f.base),
+      altura: normalizaNumero(f.altura),
+      observacion: notas.join(' · '),
+    });
+  }
   return { cliente: null, material, piezas };
 }
 

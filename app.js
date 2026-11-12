@@ -279,16 +279,26 @@ async function extraerTextoDeArchivo(file, estadoTexto) {
 
 // Intenta leer un archivo del proveedor con IA (PDF/imagen, incluye cubrecanto) y si
 // falla o no aplica, cae de vuelta a extracción de texto (PDF.js/OCR/texto plano).
+// La IA con un PDF completo puede tardar, pero no indefinidamente (una vez se quedó "pensando"
+// más de minuto y medio). Incluye la posible espera por el límite por minuto de la IA.
+const LIMITE_REPORTE_IA_MS = 150000;
+
 async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
   // Becor manda PDF de SketchCut con texto real: se lee la tabla "Partes" directo, sin IA
   // (exacto, instantáneo y sin gastar cuota). La IA queda para fotos/capturas o PDF escaneado.
+  let diagnosticoPDF = null;
   if (estado.proveedor === 'becor' && esPDF(file)) {
     try {
       estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} (PDF de Becor)...`;
-      const reporte = Engine.parseReporteBecor(await extraerTextoPDF(file));
+      const texto = await extraerTextoPDF(file);
+      const reporte = Engine.parseReporteBecor(texto);
       if (reporte.piezas.length > 0) return { reporte, conCubrecanto: false };
+      // Para diagnosticar si vuelve a pasar: qué texto trae el PDF (o si no trae, es escaneado).
+      const primeras = texto.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 8).join(' | ');
+      diagnosticoPDF = primeras ? `el PDF trae texto pero no se reconoció la tabla "Partes" (empieza: ${primeras.slice(0, 220)})` : 'el PDF no trae texto (parece escaneado)';
     } catch (err) {
       console.error(err);
+      diagnosticoPDF = `no se pudo abrir el PDF (${String(err?.message || err).slice(0, 120)})`;
     }
   }
 
@@ -306,7 +316,7 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
     pintar();
     const reloj = setInterval(pintar, 1000);
     try {
-      const reporte = await window.leerReporteProveedorConIA(file, estado.proveedor);
+      const reporte = await conLimite(window.leerReporteProveedorConIA(file, estado.proveedor), LIMITE_REPORTE_IA_MS);
       if (reporte.piezas && reporte.piezas.length > 0) return { reporte, conCubrecanto: true, conRespaldo: reporte.usoRespaldo ? (reporte.cuotaRespaldo || {}) : null };
       fallaIA = { error: 'la IA no encontró piezas en el archivo' };
     } catch (err) {
@@ -319,11 +329,11 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
   }
   try {
     const texto = await extraerTextoDeArchivo(file, estadoTexto);
-    return { reporte: Engine.parseReportePorProveedor(texto, estado.proveedor), conCubrecanto: false, fallaIA };
+    return { reporte: Engine.parseReportePorProveedor(texto, estado.proveedor), conCubrecanto: false, fallaIA, diagnosticoPDF };
   } catch (err) {
     // Si tampoco se pudo leer el texto, se conserva el motivo de la IA para mostrarlo.
     console.error(err);
-    return { reporte: { piezas: [] }, conCubrecanto: false, fallaIA };
+    return { reporte: { piezas: [] }, conCubrecanto: false, fallaIA, diagnosticoPDF };
   }
 }
 
@@ -337,13 +347,15 @@ async function procesarArchivosProveedor(files) {
   let totalPiezas = 0;
   let archivosConCubrecanto = 0;
   let huboError = false;
+  let diagnostico = null;
   let ultimaFallaIA = null;
   let usoRespaldo = false;
 
   for (let i = 0; i < files.length; i++) {
     try {
-      const { reporte, conCubrecanto, conRespaldo, fallaIA } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
+      const { reporte, conCubrecanto, conRespaldo, fallaIA, diagnosticoPDF } = await leerUnReporteProveedor(files[i], estadoTexto, i + 1, files.length);
       if (fallaIA) ultimaFallaIA = fallaIA;
+      if (diagnosticoPDF) diagnostico = diagnosticoPDF;
       if (conRespaldo) usoRespaldo = conRespaldo;
       if (!reporte.piezas || reporte.piezas.length === 0) {
         huboError = true;
@@ -363,7 +375,8 @@ async function procesarArchivosProveedor(files) {
     ? ` La IA no pudo leerlo: ${ultimaFallaIA.error}.${ultimaFallaIA.detalle && ultimaFallaIA.detalle !== ultimaFallaIA.error ? ` (Detalle: ${ultimaFallaIA.detalle})` : ''}`
     : '';
   if (totalPiezas === 0) {
-    estadoTexto.textContent = `No se encontraron piezas en el/los archivo(s).${notaIA} Puedes reintentar, o probar con "pegar texto".`;
+    const notaPDF = diagnostico ? ` Lectura directa del PDF: ${diagnostico}.` : '';
+    estadoTexto.textContent = `No se encontraron piezas en el/los archivo(s).${notaPDF}${notaIA} Puedes reintentar, o probar con "pegar texto".`;
   } else {
     // Becor no muestra cubrecanto en su reporte, así que ahí no hay nada que advertir.
     const notaCubrecanto = estado.proveedor !== 'becor' && archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
@@ -562,8 +575,8 @@ function motivoError(err) {
 }
 
 // Sin límite, una llamada colgada dejaba la ventana en "Buscando…" para siempre.
-function conLimite(promesa) {
-  const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('tardó demasiado')), LIMITE_UBICAR_MS));
+function conLimite(promesa, ms = LIMITE_UBICAR_MS) {
+  const limite = new Promise((_, reject) => setTimeout(() => reject(new Error('tardó demasiado')), ms));
   return Promise.race([promesa, limite]);
 }
 
