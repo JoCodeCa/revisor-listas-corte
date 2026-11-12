@@ -336,8 +336,28 @@ td.enchape-no-indicado { color: var(--texto-suave); }
 .problema-encabezado { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .problema-pieza { font-weight: 600; font-size: 0.92rem; }
 .problema .estado-pill { background: var(--rojo-solido); color: white; white-space: nowrap; }
-.problema-detalle { font-size: 0.86rem; margin-top: 0.25rem; color: var(--texto); }
-.problema-detalle b { color: var(--rojo); }
+.problema-pieza .btn-ver-foto { font-size: inherit; padding: 0; }
+/* Mi lista arriba, proveedor abajo, mismas columnas y unidades; lo distinto en rojo. */
+table.comparativa {
+  width: 100%;
+  margin-top: 0.45rem;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  background: var(--blanco);
+  border-radius: 6px;
+  overflow: hidden;
+}
+table.comparativa th, table.comparativa td {
+  border: 1px solid var(--borde);
+  padding: 0.3rem 0.35rem;
+  text-align: center;
+}
+table.comparativa thead th { font-size: 0.75rem; font-weight: 600; color: var(--texto-suave); background: var(--fondo); }
+table.comparativa tbody th { font-size: 0.8rem; font-weight: 600; text-align: left; white-space: nowrap; color: var(--texto-suave); width: 1%; }
+table.comparativa td { font-variant-numeric: tabular-nums; font-weight: 600; }
+table.comparativa td.dif { color: var(--rojo); background: var(--rojo-claro); }
+table.comparativa td.ausente { font-weight: 400; font-style: italic; color: var(--rojo); }
+.problema-pie { font-size: 0.78rem; color: var(--texto-suave); margin-top: 0.35rem; }
 .todo-coincide {
   margin: 0;
   padding: 0.9rem;

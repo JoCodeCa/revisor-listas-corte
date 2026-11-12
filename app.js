@@ -927,29 +927,51 @@ document.getElementById('proveedor-telefono').addEventListener('input', (e) => {
   if (texto) actualizarEnlaceWhatsapp(texto);
 });
 
-// ---- Resultado simplificado: primero solo lo que está mal (y solo el dato que difiere); las
-// piezas correctas quedan plegadas en una lista compacta. Antes se repetía todo de cada pieza
-// (incluido el cubrecanto) y la pantalla se saturaba.
+// ---- Resultado: primero solo lo que está mal; las piezas correctas quedan plegadas en una lista
+// compacta. Cada problema se muestra como dos renglones alineados, "Mi lista" arriba y
+// "Proveedor" abajo, AMBOS EN MM (mezclar cm y mm confundía), con el dato que difiere en rojo.
 
 const fmt = n => String(n);
 const piezaCm = m => `${fmt(m.cantidad)} pz · ${fmt(m.ladoA_cm)} × ${fmt(m.ladoB_cm)} cm`;
-const piezaMm = p => `${fmt(p.cantidad)} pz · ${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm`;
 
-// Una frase corta con SOLO lo que no cuadra.
-function diferencia(r) {
-  const p = r.proveedor, m = r.mia;
+// Nota corta debajo de la comparación, solo donde ayuda a entender el error.
+function notaProblema(r) {
   switch (r.estado) {
-    case 'cantidad': return `El proveedor capturó <b>${fmt(p.cantidad)} pz</b>`;
-    case 'medida': {
-      const cant = p.cantidad !== m.cantidad ? ` y <b>${fmt(p.cantidad)} pz</b>` : '';
-      return `El proveedor capturó <b>${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm</b>${cant} (debía ser ${fmt(m.ladoA_mm)} × ${fmt(m.ladoB_mm)} mm)`;
-    }
-    case 'invertida': return `Lados cruzados: capturó <b>${fmt(p.base_mm)} × ${fmt(p.altura_mm)} mm</b> — la veta quedaría al revés`;
-    case 'enchape': return `Cubrecanto: pediste ${m.contarA}A/${m.contarB}B, capturó <b>${p.ladoAEnchapado}A/${p.ladoBEnchapado}B</b>`;
-    case 'falta': return 'No aparece en el reporte del proveedor';
-    case 'sobra': return `Pieza que no pediste: <b>${piezaMm(p)}</b>`;
-    default: return escaparHtml(r.mensaje);
+    case 'invertida': return 'Lados cruzados: la veta quedaría al revés.';
+    case 'falta': return 'No aparece en el reporte del proveedor.';
+    case 'sobra': return 'El proveedor la capturó pero no está en tu lista.';
+    default: return '';
   }
+}
+
+function tablaComparativa(r) {
+  const m = r.mia, p = r.proveedor;
+  const conEnchape = r.estado === 'enchape';
+  const difiere = (a, b) => a !== null && b !== null && Math.abs(a - b) > Engine.TOLERANCIA_MM;
+  const marca = (valor, distinto) => `<td class="${distinto ? 'dif' : ''}">${valor}</td>`;
+  const cantDif = m && p && m.cantidad !== p.cantidad;
+  const aDif = m && p && difiere(m.ladoA_mm, p.base_mm);
+  const bDif = m && p && difiere(m.ladoB_mm, p.altura_mm);
+  const encDif = conEnchape && m && p && (m.contarA !== p.ladoAEnchapado || m.contarB !== p.ladoBEnchapado);
+  const vacio = texto => `<td class="ausente" colspan="${conEnchape ? 4 : 3}">${texto}</td>`;
+
+  const filaMia = m
+    ? marca(fmt(m.cantidad), cantDif) + marca(fmt(m.ladoA_mm), aDif) + marca(fmt(m.ladoB_mm), bDif) +
+      (conEnchape ? marca(`${m.contarA}A/${m.contarB}B`, encDif) : '')
+    : vacio('no la pediste');
+  const filaProv = p
+    ? marca(fmt(p.cantidad), cantDif) + marca(fmt(p.base_mm), aDif) + marca(fmt(p.altura_mm), bDif) +
+      (conEnchape ? marca(`${p.ladoAEnchapado}A/${p.ladoBEnchapado}B`, encDif) : '')
+    : vacio('no aparece');
+
+  return `
+    <table class="comparativa">
+      <thead><tr><th></th><th>Cant.</th><th>Lado A</th><th>Lado B</th>${conEnchape ? '<th>Cubrecanto</th>' : ''}</tr></thead>
+      <tbody>
+        <tr><th>Mi lista</th>${filaMia}</tr>
+        <tr><th>Proveedor</th>${filaProv}</tr>
+      </tbody>
+    </table>`;
 }
 
 function renderResultados(resultados) {
@@ -961,20 +983,27 @@ function renderResultados(resultados) {
   problemas.forEach(r => {
     const tarjeta = document.createElement('div');
     tarjeta.className = 'problema';
-    const titulo = r.mia ? `Pieza ${r.mia.no} · ${piezaCm(r.mia)}` : 'Del proveedor';
+    const fila = r.mia ? estado.misFilas[r.mia.no - 1] : null;
+    // Si la pieza se leyó de una foto, el título abre la revisión contra la foto: así se ve si el
+    // error es del proveedor o de cómo se leyó la hoja escrita a mano.
+    const titulo = !r.mia ? 'Pieza del proveedor'
+      : fila?.fotoId ? `<button type="button" class="btn-ver-foto" title="Ver en mi foto">Pieza ${r.mia.no}</button>`
+      : `Pieza ${r.mia.no}`;
+    const nota = notaProblema(r);
     tarjeta.innerHTML = `
       <div class="problema-encabezado">
         <span class="problema-pieza">${titulo}</span>
         <span class="estado-pill">${estadoALegible(r.estado)}</span>
       </div>
-      <div class="problema-detalle">${diferencia(r)}</div>
+      ${tablaComparativa(r)}
+      <div class="problema-pie">Medidas en mm${r.mia ? ` · en tu hoja: ${fmt(r.mia.ladoA_cm)} × ${fmt(r.mia.ladoB_cm)} cm` : ''}${nota ? ` · ${nota}` : ''}</div>
     `;
+    tarjeta.querySelector('.btn-ver-foto')?.addEventListener('click', () => abrirRevision(r.mia.no - 1));
     lista.appendChild(tarjeta);
   });
 
   const detalle = document.getElementById('detalle-correctas');
   detalle.hidden = correctas.length === 0;
-  // Si todo está bien no hay nada más que ver; si hay problemas, las correctas van plegadas.
   detalle.open = false;
   document.getElementById('resumen-correctas').textContent = `✓ ${correctas.length} pieza(s) coinciden — ver`;
   document.getElementById('lista-correctas').innerHTML = correctas
