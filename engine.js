@@ -286,6 +286,54 @@ function parseReporteProveedor(texto) {
   };
 }
 
+// Becor: PDF de SketchCut. Lo que importa es la tabla "Partes" con columnas
+//   #  | Largo | Ancho | Cantidad | Rotación | Nombre | PA
+// en milímetros (Largo = Lado A, Ancho = Lado B) y SIN cubrecanto. El PDF también trae portada y
+// hojas "Piezas en el tablero" (los acomodos), con tablas de números parecidos que no deben
+// contarse: por eso solo se toman renglones numerados "N. largo ancho cantidad" (los del
+// acomodo no llevan el "N.").
+function parseReporteBecor(texto) {
+  const lineas = String(texto || '')
+    .split('\n')
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(l => l.length > 0);
+
+  let material = null;
+  for (const l of lineas) {
+    const m = l.match(/Material\s*:\s*(.*?)\s*(?:Espesor\s*:.*)?$/i);
+    if (m && m[1]) { material = m[1]; break; }
+  }
+
+  // En el PDF, "No"/"Sí" de Rotación va un poco más abajo que los números del renglón y suele
+  // salir como una línea aparte; por eso es opcional aquí y se busca también en la siguiente.
+  const renglon = /^(\d{1,3})\s*\.\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+)(?:\s+(No|S[ií])(?=\s|$))?\s*(.*)$/i;
+  const soloRotacion = /^(No|S[ií])$/i;
+  const vistos = new Set();
+  const piezas = [];
+  lineas.forEach((l, i) => {
+    const m = l.match(renglon);
+    if (!m || vistos.has(m[1])) return; // el # no se repite (por si el encabezado sale dos veces)
+    vistos.add(m[1]);
+    const rotacion = m[5] || (soloRotacion.test(lineas[i + 1] || '') ? lineas[i + 1] : '');
+    const notas = [];
+    if (/^s/i.test(rotacion)) notas.push('Rotación: Sí');
+    const nombre = m[6].replace(/[☐□]/g, '').trim();
+    if (nombre) notas.push(nombre);
+    piezas.push({
+      cantidad: Number(m[4]),
+      base: normalizaNumero(m[2]),
+      altura: normalizaNumero(m[3]),
+      observacion: notas.join(' · '),
+    });
+  });
+  return { cliente: null, material, piezas };
+}
+
+// Elige el lector de texto según el proveedor (ver PERFILES_PROVEEDOR en app.js).
+function parseReportePorProveedor(texto, proveedor) {
+  return proveedor === 'becor' ? parseReporteBecor(texto) : parseReporteProveedor(texto);
+}
+
 // Arma una línea breve, dirigida al proveedor (no al taller), por cada pieza con problema.
 // A diferencia de r.mensaje (pensado para la tabla de resultados, en 1a persona hacia el
 // usuario), esto se redacta para que el proveedor entienda qué corregir sin contexto extra.
@@ -335,6 +383,8 @@ const API = {
   normalizarMisPiezas,
   normalizarPiezasProveedor,
   normalizaNumero,
+  parseReporteBecor,
+  parseReportePorProveedor,
   parseReporteProveedor,
   TOLERANCIA_MM,
 };

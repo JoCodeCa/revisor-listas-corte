@@ -153,12 +153,21 @@ document.getElementById('proveedor-perfil').addEventListener('change', (e) => {
   estado.proveedor = e.target.value;
   guardarEstado();
   renderPerfilProveedor();
+  renderProveedor();
   // El mensaje de correcciones ya armado ahora va al WhatsApp de este proveedor.
   const texto = document.getElementById('texto-correcciones').value;
   if (texto) actualizarEnlaceWhatsapp(texto);
 });
 
+// Una pieza leída de un reporte que no indica cubrecanto (Becor, o texto sin IA) no trae esos
+// campos: se muestra "—" en vez de casillas vacías, que se leerían como "sin cubrecanto".
+function tieneEnchape(fila) {
+  return ['enchapeA1', 'enchapeA2', 'enchapeB1', 'enchapeB2'].some(c => fila[c] !== undefined);
+}
+
 function renderProveedor() {
+  document.getElementById('th-enchape-proveedor').textContent =
+    estado.proveedor === 'becor' ? 'Enchape (Becor no lo indica)' : 'Enchape (tapacanto)';
   const infoDiv = document.getElementById('info-proveedor');
   if (estado.provCliente || estado.provMaterial) {
     infoDiv.hidden = false;
@@ -176,10 +185,12 @@ function renderProveedor() {
       <td><input type="number" min="0" step="1" data-campo="cantidad" value="${escaparHtml(fila.cantidad)}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="base" value="${escaparHtml(fila.base)}"></td>
       <td><input type="number" min="0" step="0.1" data-campo="altura" value="${escaparHtml(fila.altura)}"></td>
+      ${tieneEnchape(fila) ? `
       <td><input type="checkbox" data-campo="enchapeA1" ${fila.enchapeA1 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeA2" ${fila.enchapeA2 ? 'checked' : ''}></td>
       <td><input type="checkbox" data-campo="enchapeB1" ${fila.enchapeB1 ? 'checked' : ''}></td>
-      <td><input type="checkbox" data-campo="enchapeB2" ${fila.enchapeB2 ? 'checked' : ''}></td>
+      <td><input type="checkbox" data-campo="enchapeB2" ${fila.enchapeB2 ? 'checked' : ''}></td>` : `
+      <td colspan="4" class="enchape-no-indicado" title="El reporte no indica cubrecanto: no se compara">—</td>`}
       <td><input type="text" data-campo="observacion" value="${escaparHtml(fila.observacion)}"></td>
       <td><button type="button" class="btn-eliminar" title="Eliminar pieza">✕</button></td>
     `;
@@ -269,6 +280,18 @@ async function extraerTextoDeArchivo(file, estadoTexto) {
 // Intenta leer un archivo del proveedor con IA (PDF/imagen, incluye cubrecanto) y si
 // falla o no aplica, cae de vuelta a extracción de texto (PDF.js/OCR/texto plano).
 async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
+  // Becor manda PDF de SketchCut con texto real: se lee la tabla "Partes" directo, sin IA
+  // (exacto, instantáneo y sin gastar cuota). La IA queda para fotos/capturas o PDF escaneado.
+  if (estado.proveedor === 'becor' && esPDF(file)) {
+    try {
+      estadoTexto.textContent = `Leyendo archivo ${indice} de ${total} (PDF de Becor)...`;
+      const reporte = Engine.parseReporteBecor(await extraerTextoPDF(file));
+      if (reporte.piezas.length > 0) return { reporte, conCubrecanto: false };
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   let fallaIA = null;
   if ((esPDF(file) || esImagen(file)) && typeof window.leerReporteProveedorConIA === 'function') {
     // Contador de segundos: la lectura con IA de un reporte largo puede tardar.
@@ -296,7 +319,7 @@ async function leerUnReporteProveedor(file, estadoTexto, indice, total) {
   }
   try {
     const texto = await extraerTextoDeArchivo(file, estadoTexto);
-    return { reporte: Engine.parseReporteProveedor(texto), conCubrecanto: false, fallaIA };
+    return { reporte: Engine.parseReportePorProveedor(texto, estado.proveedor), conCubrecanto: false, fallaIA };
   } catch (err) {
     // Si tampoco se pudo leer el texto, se conserva el motivo de la IA para mostrarlo.
     console.error(err);
@@ -342,7 +365,8 @@ async function procesarArchivosProveedor(files) {
   if (totalPiezas === 0) {
     estadoTexto.textContent = `No se encontraron piezas en el/los archivo(s).${notaIA} Puedes reintentar, o probar con "pegar texto".`;
   } else {
-    const notaCubrecanto = archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
+    // Becor no muestra cubrecanto en su reporte, así que ahí no hay nada que advertir.
+    const notaCubrecanto = estado.proveedor !== 'becor' && archivosConCubrecanto < files.length ? ' (algún archivo se leyó solo con texto, sin cubrecanto)' : '';
     const notaError = huboError ? ' — algún archivo falló, revisa' : '';
     // Se agotó la cuota del modelo completo y se leyó con el rápido: el cubrecanto puede venir mal.
     const limiteDia = usoRespaldo && usoRespaldo.porDia ? `la cuota DIARIA del modelo avanzado${usoRespaldo.limite ? ` (${usoRespaldo.limite} consultas al día)` : ''}` : 'la cuota del modelo avanzado';
@@ -359,7 +383,7 @@ document.getElementById('input-pdf').addEventListener('change', (e) => {
 
 document.getElementById('btn-procesar-texto').addEventListener('click', () => {
   const texto = document.getElementById('texto-pegado').value;
-  const reporte = Engine.parseReporteProveedor(texto);
+  const reporte = Engine.parseReportePorProveedor(texto, estado.proveedor);
   const estadoTexto = document.getElementById('pdf-estado');
   if (reporte.piezas.length === 0) {
     estadoTexto.textContent = 'No se encontraron piezas en el texto pegado.';

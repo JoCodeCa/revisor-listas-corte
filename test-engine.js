@@ -1,7 +1,7 @@
 // Pruebas rápidas del motor de comparación usando el caso real de las dos hojas de ejemplo.
 'use strict';
 const assert = require('assert');
-const { cmAMm, comparar, parseReporteProveedor, generarMensajeProveedor } = require('./engine.js');
+const { cmAMm, comparar, parseReporteProveedor, parseReporteBecor, parseReportePorProveedor, generarMensajeProveedor } = require('./engine.js');
 
 // --- cmAMm ---
 assert.strictEqual(cmAMm(187.6), 1876);
@@ -214,5 +214,72 @@ assert.ok(mensaje.includes('pedí'), 'debe estar redactado en 1a persona hacia e
 assert.ok(!mensaje.includes('el proveedor'), 'no debe hablar del proveedor en 3a persona dentro de su propio mensaje');
 assert.ok(/^1\)/m.test(mensaje), 'debe numerar los puntos');
 console.log('OK: generarMensajeProveedor redacta un mensaje dirigido al proveedor');
+
+// --- Becor (PDF de SketchCut): tabla "Partes" con Largo | Ancho | Cantidad, en mm, sin cubrecanto ---
+// Texto como lo saca pdf.js del PDF real: portada, la tabla "Partes" y una hoja de acomodo
+// ("Piezas en el tablero") con números parecidos que NO deben contarse.
+const textoBecor = `
+Reporte de corte
+1
+SketchCut
+Orden: Fecha: Fecha para entrega:
+Material: Aglomerado HM 16mm Espesor: 16
+Partes
+# Largo Ancho Cantidad Rotación Nombre PA
+1. 2430 550 2 No
+2. 344 550 2 No
+3. 314 550 1 No
+4. 314 100 3 No
+8. 1084 100 12 No
+18. 100 520 2 No
+19. 873 514 2 Sí Costado
+27. 1408 100 8 No
+2
+SketchCut
+Piezas en el tablero
+Largo Ancho Cantidad
+2430 550 2
+2365 100 1
+1408 100 1
+`;
+const becor = parseReporteBecor(textoBecor);
+assert.strictEqual(becor.piezas.length, 8, 'solo las 8 piezas de la tabla Partes, no las del acomodo');
+assert.deepStrictEqual(becor.piezas[0], { cantidad: 2, base: 2430, altura: 550, observacion: '' });
+assert.deepStrictEqual(becor.piezas[4], { cantidad: 12, base: 1084, altura: 100, observacion: '' }, 'la cantidad es la columna DESPUÉS de las medidas');
+assert.strictEqual(becor.piezas[6].observacion, 'Rotación: Sí · Costado');
+assert.strictEqual(becor.material, 'Aglomerado HM 16mm');
+assert.ok(becor.piezas.every(p => p.enchapeA1 === undefined), 'Becor no trae cubrecanto: no debe haber datos de enchape');
+console.log('OK: parseReporteBecor lee la tabla Partes e ignora portada y acomodos');
+
+// Becor contra mi lista (cm): coincide, y el cubrecanto de mi lista no se compara.
+r = comparar(
+  [{ cantidad: 2, ladoA: 243, ladoB: 55, enchapeA1: true }, { cantidad: 12, ladoA: 108.4, ladoB: 10 }, { cantidad: 2, ladoA: 10, ladoB: 52 }],
+  parseReporteBecor(textoBecor).piezas.filter(p => [2430, 1084, 100].includes(p.base)),
+);
+assert.strictEqual(r.resumen.conError, 0, 'Becor y mi lista coinciden sin comparar cubrecanto');
+console.log('OK: Becor se compara contra mi lista sin marcar cubrecanto');
+
+// Así lo saca pdf.js del PDF real: "No"/"Sí" de Rotación queda un poco más abajo y sale en su propia línea.
+const textoBecorPdf = `Partes
+# Largo Ancho Cantidad Rotación Nombre PA
+1. 2430 550 2
+No
+2. 344 550 2
+No
+19. 873 514 2 Costado
+Sí
+2
+Piezas en el tablero
+Largo Ancho Cantidad
+2430 550 2`;
+const becorPdf = parseReporteBecor(textoBecorPdf);
+assert.strictEqual(becorPdf.piezas.length, 3, 'Rotación en línea aparte no debe impedir leer el renglón');
+assert.deepStrictEqual(becorPdf.piezas[1], { cantidad: 2, base: 344, altura: 550, observacion: '' });
+assert.strictEqual(becorPdf.piezas[2].observacion, 'Rotación: Sí · Costado');
+console.log('OK: parseReporteBecor lee el texto tal como sale del PDF (Rotación en otra línea)');
+
+assert.strictEqual(parseReportePorProveedor(textoBecor, 'becor').piezas.length, 8);
+assert.strictEqual(parseReportePorProveedor(textoReporte, 'pg-maderas').piezas.length, 5);
+console.log('OK: parseReportePorProveedor usa el lector de cada proveedor');
 
 console.log('\nTodas las pruebas pasaron.');

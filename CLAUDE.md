@@ -52,7 +52,11 @@ detectar errores y redactar el mensaje de correcciones para el proveedor (WhatsA
   pieza dibujada con la base horizontal, `cubrecantoIndicado`), así la conversión y la comparación son únicas.
 - **PG Maderas** (`pg-maderas`): afinado con reportes reales (tabla "Piezas ubicadas" + dibujo "Esquema"). El
   parser de texto `parseReporteProveedor` (respaldo sin IA) es de este formato.
-- **Becor** (`becor`): prompt GENERAL, pendiente de afinar con un reporte real de Becor.
+- **Becor** (`becor`): PDF de SketchCut, en mm, SIN cubrecanto. Tabla "Partes": `# | Largo | Ancho | Cantidad |
+  Rotación | Nombre | PA` (Largo = Lado A, Ancho = Lado B; la Cantidad va DESPUÉS de las medidas). El PDF trae
+  portada y hojas "Piezas en el tablero" (acomodos) que se ignoran. Un PDF de Becor se lee SIN IA con
+  `parseReporteBecor` (engine.js; ojo: en el PDF "No/Sí" de Rotación sale en la línea siguiente); la IA
+  (`PROMPT_BECOR`) solo para fotos/capturas o PDF escaneado. Las piezas sin datos de enchape se muestran con "—".
 - Teléfono de WhatsApp por proveedor: `estado.proveedorTelefonos[id]` (el antiguo `proveedorTelefono` se migró a PG Maderas).
 - Agregar un proveedor: una entrada en `PERFILES_PROVEEDOR` y su prompt en `PROMPTS_REPORTE`.
 

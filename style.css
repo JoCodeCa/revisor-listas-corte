@@ -225,6 +225,8 @@ td input[type="number"]::-webkit-inner-spin-button,
 }
 
 
+td.enchape-no-indicado { color: var(--texto-suave); }
+
 .btn-eliminar {
   background: none;
   border: none;

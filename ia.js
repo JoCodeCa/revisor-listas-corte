@@ -346,25 +346,24 @@ También, si puedes leerlos, el nombre del cliente y la descripción del materia
 Prioriza la precisión: revisa cada orilla con calma antes de responder, no adivines rápido.
 Devuelve cubrecantoIndicado = true (este formato siempre indica el cubrecanto con el dibujo).`;
 
-// Becor: formato general mientras no se afine con un reporte real de Becor.
-const PROMPT_BECOR = `Este es el reporte u orden de corte que el proveedor de tableros "Becor" generó al capturar el pedido de
-un taller de carpintería (melamina/MDF/aglomerado). Puede ser una tabla, una captura de pantalla de su sistema o un
-PDF, con columnas como Cantidad/Cant/Piezas, Largo/Base y Ancho/Altura, y a veces el cubrecanto (canto, tapacanto,
-enchape, chapacinta) indicado con columnas, marcas, códigos de lados o un dibujo de la pieza.
+// Becor: PDF de SketchCut. Normalmente se lee sin IA (parseReporteBecor en engine.js); este prompt
+// es para cuando llega como foto/captura o PDF escaneado.
+const PROMPT_BECOR = `Este es el reporte de corte del proveedor de tableros "Becor", generado con el programa SketchCut.
+Puede traer varias hojas: una portada, la tabla "Partes" y hojas "Piezas en el tablero" con el acomodo de las piezas
+en cada tablero (dibujos y tablas giradas).
 
-Lee SOLO las piezas del pedido (ignora totales, tableros/planchas usados, precios y encabezados).
-Para cada pieza devuelve:
-- cantidad (entero),
-- base: la PRIMERA medida de la pieza (largo/base) y altura: la SEGUNDA (ancho/altura), EN MILÍMETROS
-  (si el reporte está en centímetros, multiplica por 10; usa punto decimal),
-- el cubrecanto como 4 orillas de la pieza imaginándola dibujada con la base HORIZONTAL y la altura VERTICAL:
-  bordeSuperior y bordeInferior son las orillas a lo largo de la base; bordeIzquierdo y bordeDerecho las orillas
-  a lo largo de la altura. Si el reporte dice cuántos lados largos/cortos llevan canto, repártelos en ese orden
-  (primero superior/izquierdo, luego inferior/derecho).
-- observacion: notas de esa pieza si las hay, si no cadena vacía.
-Si el reporte NO indica el cubrecanto de ninguna forma, devuelve cubrecantoIndicado = false y las 4 orillas en false;
-si sí lo indica, cubrecantoIndicado = true.
-También, si puedes leerlos, el nombre del cliente y la descripción del material.
+Lee SOLO la tabla "Partes", cuyas columnas son, en este orden:
+  #  |  Largo  |  Ancho  |  Cantidad  |  Rotación  |  Nombre  |  PA
+OJO: la Cantidad va DESPUÉS de las medidas (tercera columna de números), no antes.
+IGNORA la portada y las hojas "Piezas en el tablero" (y cualquier dibujo o tabla de acomodo): repiten medidas y
+duplicarían piezas.
+
+Para cada renglón de "Partes" devuelve:
+- cantidad: la columna Cantidad (entero),
+- base: la columna Largo, altura: la columna Ancho (están en milímetros; usa punto decimal),
+- observacion: "Rotación: Sí" si esa columna dice Sí, más el texto de la columna Nombre si trae; si no, cadena vacía.
+Este reporte NO indica cubrecanto: devuelve cubrecantoIndicado = false y las 4 orillas en false.
+Si aparece, el material (campo "Material:" del encabezado).
 Prioriza la precisión de cantidades y medidas.`;
 
 const PROMPTS_REPORTE = { 'pg-maderas': PROMPT_PG_MADERAS, 'becor': PROMPT_BECOR };
